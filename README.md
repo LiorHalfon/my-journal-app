@@ -6,11 +6,19 @@
 
 ```
 index.html            שלד + עיצוב
-app.js                כל הלוגיקה. ה-Client ID נכנס בשורה הראשונה.
+config.js             ה-Client ID. הקובץ היחיד שצריך לגעת בו.
+app.js                חיווט: מצב המסך, אירועים, עלייה
+entries-store.js      הרשומות ב-IndexedDB
+drive.js              חיבור לגוגל וקריאות דרייב
+backup-file.js        פורמט קובץ הגיבוי
+view.js               כל מה שנוגע ל-DOM
+local-storage.js      אחסון מקומי שלא זורק
 sw.js                 service worker — הדף עובד אופליין
 manifest.webmanifest  התקנה כאפליקציה
 icons/
 ```
+
+מודולים נייטיב של הדפדפן (`type="module"`), בלי בילד ובלי תלויות.
 
 ---
 
@@ -52,9 +60,9 @@ icons/
    http://localhost:8080
    ```
    *Authorized redirect URIs* — השאר ריק. הזרימה כאן היא token client, בלי redirect.
-5. העתק את ה-Client ID לשורה בראש `app.js`:
+5. העתק את ה-Client ID ל-`config.js`:
    ```js
-   const GOOGLE_CLIENT_ID = "1234....apps.googleusercontent.com";
+   export const GOOGLE_CLIENT_ID = "1234....apps.googleusercontent.com";
    ```
 
 ---

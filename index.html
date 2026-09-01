@@ -19,25 +19,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..700&family=David+Libre:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#E9EBE8; --surface:#F5F6F4;
-  --ink:#1D211F; --ink-soft:#5B635F; --ink-faint:#8B938E;
-  --rule:#D2D6D1; --accent:#3F6B57; --accent-soft:#DCE7E0;
-  --danger:#8C3A34; --shadow:0 1px 2px rgba(29,33,31,.06);
+  color-scheme: light dark;
+  --paper:       light-dark(#E9EBE8, #121614);
+  --surface:     light-dark(#F5F6F4, #1A1F1C);
+  --ink:         light-dark(#1D211F, #E3E7E2);
+  --ink-soft:    light-dark(#5B635F, #A3ADA6);
+  --ink-faint:   light-dark(#8B938E, #8A948E);
+  --rule:        light-dark(#D2D6D1, #262C28);
+  --accent:      light-dark(#3F6B57, #7FB39A);
+  --accent-soft: light-dark(#DCE7E0, #22302A);
+  --danger:      light-dark(#8C3A34, #D98B84);
+  --shadow-color:light-dark(rgba(29,33,31,.06), rgba(0,0,0,.3));
+  --shadow: 0 1px 2px var(--shadow-color);
 }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --paper:#121614; --surface:#1A1F1C;
-    --ink:#E3E7E2; --ink-soft:#8A938D; --ink-faint:#69726C;
-    --rule:#262C28; --accent:#7FB39A; --accent-soft:#22302A;
-    --danger:#D98B84; --shadow:0 1px 2px rgba(0,0,0,.3);
-  }
-}
-:root[data-theme="dark"]{
-  --paper:#121614; --surface:#1A1F1C;
-  --ink:#E3E7E2; --ink-soft:#8A938D; --ink-faint:#69726C;
-  --rule:#262C28; --accent:#7FB39A; --accent-soft:#22302A;
-  --danger:#D98B84; --shadow:0 1px 2px rgba(0,0,0,.3);
-}
+:root[data-theme="light"]{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -174,6 +170,11 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
   padding:.6rem .3rem;border-radius:.5rem;
 }
 .backup-item:hover{background:var(--paper)}
+.backup-ico{
+  width:1.6rem;height:1.6rem;border-radius:.4rem;flex:none;
+  background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;font-size:.8rem;
+}
 .backup-item time{color:var(--ink-faint);font-size:.78rem;display:block;direction:ltr;text-align:start}
 
 .toast{position:fixed;inset-inline:0;bottom:1.1rem;z-index:60;display:flex;justify-content:center;pointer-events:none;padding:0 1rem}
@@ -260,6 +261,6 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 <div class="toast" id="toast"><div id="toastText"></div></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js" defer></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

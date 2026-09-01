@@ -6,10 +6,18 @@ const VERSION = "v2";
 const SHELL = "journal-shell-" + VERSION;
 const FONTS = "journal-fonts-" + VERSION;
 
+/* כל קובץ כאן חייב להיות קיים: addAll נכשל אטומית, וכישלון אחד
+   מפיל את ההתקנה כולה ומשאיר את האפליקציה בלי מצב אופליין. */
 const SHELL_FILES = [
   "./",
   "./index.html",
   "./app.js",
+  "./config.js",
+  "./local-storage.js",
+  "./entries-store.js",
+  "./backup-file.js",
+  "./drive.js",
+  "./view.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
