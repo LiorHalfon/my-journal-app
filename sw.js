@@ -2,7 +2,7 @@
    מטרה: האפליקציה נפתחת ועובדת בלי רשת. הרשומות עצמן ב-IndexedDB,
    כאן רק שלד האפליקציה והפונטים. */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL = "journal-shell-" + VERSION;
 const FONTS = "journal-fonts-" + VERSION;
 
@@ -33,6 +33,25 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+/* רשת קודם, קאש כרשת ביטחון.
+   `cache: "no-cache"` שולח בקשה מותנית ועוקף את ה-max-age=600 של GitHub Pages,
+   כך שגרסה חדשה נתפסת בפתיחה הראשונה אחרי הפריסה ולא עשר דקות אחריה.
+   ETag מחזיר 304 כשאין שינוי, אז המחיר זניח. בלי רשת — מה שבקאש. */
+async function networkFirst(req, key) {
+  try {
+    const res = await fetch(req, { cache: "no-cache" });
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(SHELL).then((c) => c.put(key, copy));
+    }
+    return res;
+  } catch {
+    const hit = await caches.match(key);
+    if (hit) return hit;
+    throw new Error("offline, not cached: " + req.url);
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -59,30 +78,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ניווטים: רשת קודם, ובנפילה — הדף מהקאש.
+  // ניווטים והשלד: רשת קודם, ובנפילה — מהקאש.
   if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(SHELL).then((c) => c.put("./index.html", copy));
-          return res;
-        })
-        .catch(() => caches.match("./index.html"))
-    );
+    event.respondWith(networkFirst(req, "./index.html"));
     return;
   }
-
-  // שאר קבצי השלד: קאש קודם.
   if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(SHELL).then((c) => c.put(req, copy));
-        }
-        return res;
-      }))
-    );
+    event.respondWith(networkFirst(req, req));
   }
 });
