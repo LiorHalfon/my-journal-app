@@ -14,15 +14,17 @@ There is no build step, no package manager, no lint config, and no test suite �
 python3 -m http.server 8080   # then http://localhost:8080
 ```
 
-`file://` fails: the service worker and Google OAuth both require a secure context, and localhost counts as one. Deploying is uploading the folder to any static host over HTTPS.
+`file://` fails: the service worker and Google OAuth both require a secure context, and localhost counts as one. Deployment is GitHub Pages off `main` — pushing is deploying, live at https://liorhalfon.github.io/my-journal-app/.
+
+**Treat the origin as fixed.** IndexedDB is keyed to `https://liorhalfon.github.io`, so moving hosts abandons every entry on every installed device; the only migration path is the JSON export/import pair. The path within the origin is free to change.
 
 Drive backup stays inert until an OAuth Client ID replaces the placeholder at `app.js:8` **and** the exact serving origin is registered as an *Authorized JavaScript origin* in Google Cloud. `initAuth()` detects the `PASTE-` prefix and disables the connect button.
 
 ## Editing gotchas
 
-**Bump `VERSION` in `sw.js` when `index.html`, `app.js`, or the manifest changes.** Same-origin assets are served cache-first, so an installed worker keeps handing out the old `app.js` and the change never appears in the browser.
+**Shipping a change is just `git push`.** The shell is served network-first through `networkFirst()`, which fetches with `cache: "no-cache"` so the conditional request sidesteps the `max-age=600` GitHub Pages sets. An installed device picks the change up on its first launch after the Pages build. `VERSION` exists for deliberate precache resets, not for routine deploys.
 
-**`SHELL_FILES` in `sw.js` must match real paths.** `cache.addAll()` rejects atomically — a single 404 fails the whole install and kills offline mode silently. It is currently mismatched: `sw.js` and the manifest reference `icons/*.png`, while the PNGs sit at the repo root with no `icons/` directory.
+**`SHELL_FILES` in `sw.js` must match real paths.** `cache.addAll()` rejects atomically, so one 404 fails the whole install — and `register()` in `app.js` swallows the rejection, so offline dies with no visible symptom while the app keeps working online. Adding a shell file means verifying it actually serves.
 
 ## Architecture
 
