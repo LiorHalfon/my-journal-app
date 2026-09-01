@@ -48,7 +48,7 @@ icons/
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
    תחת *Authorized JavaScript origins* הוסף את המקור המדויק, בלי נתיב ובלי סלאש בסוף:
    ```
-   https://<user>.github.io
+   https://liorhalfon.github.io
    http://localhost:8080
    ```
    *Authorized redirect URIs* — השאר ריק. הזרימה כאן היא token client, בלי redirect.
@@ -64,7 +64,7 @@ icons/
 service worker ו-OAuth דורשים origin אמיתי. `file://` לא יעבוד.
 
 ```bash
-cd tiny-journal
+cd my-journal-app
 python3 -m http.server 8080
 ```
 
@@ -76,7 +76,7 @@ python3 -m http.server 8080
 תנאי אחד: **HTTPS**. בלעדיו אין service worker ואין OAuth.
 
 שים לב ל-origin: ב-GitHub Pages כל הריפואים תחת אותו חשבון חולקים
-`https://<user>.github.io`, אז מקור אחד מכסה את כולם.
+`https://liorhalfon.github.io`, אז מקור אחד מכסה את כולם.
 
 ## 4. התקנה בנייד
 
