@@ -56,6 +56,7 @@ Drive backup stays inert until an OAuth Client ID replaces the placeholder in `c
 
 - UI strings are Hebrew and hardcoded inline; there is no i18n layer. Layout is RTL, so use logical CSS properties (`margin-inline-start`, `inset-inline`).
 - All CSS lives in the `<style>` block of `index.html`. Each colour token is declared once with `light-dark()`, so a palette change is a one-line edit; `[data-theme]` overrides `color-scheme` to force a mode.
+- The writing surface (`.composer textarea`, `.entry-text`, `.entry-edit textarea`) is Heebo; everything else is Assistant. That split is what makes an entry read as content rather than as interface.
 - Text colours are held to WCAG AA. `--ink-faint` in the light palette is the known exception at 2.63 — see the git history for the dark-palette fix.
 - DOM access is by id through `view.byId()`; list interactions are delegated on `#list` via `data-act` attributes.
 - The service worker passes `googleapis.com` and `accounts.google.com` requests straight to the network — tokens and Drive responses have to be fresh.
