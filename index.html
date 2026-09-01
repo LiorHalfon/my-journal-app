@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>יומן</title>
+<meta name="description" content="יומן אישי מינימליסטי עם גיבוי לגוגל דרייב">
+<meta name="theme-color" content="#E9EBE8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121614" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="יומן">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..700&family=David+Libre:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9EBE8; --surface:#F5F6F4;
+  --ink:#1D211F; --ink-soft:#5B635F; --ink-faint:#8B938E;
+  --rule:#D2D6D1; --accent:#3F6B57; --accent-soft:#DCE7E0;
+  --danger:#8C3A34; --shadow:0 1px 2px rgba(29,33,31,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#121614; --surface:#1A1F1C;
+    --ink:#E3E7E2; --ink-soft:#8A938D; --ink-faint:#69726C;
+    --rule:#262C28; --accent:#7FB39A; --accent-soft:#22302A;
+    --danger:#D98B84; --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#121614; --surface:#1A1F1C;
+  --ink:#E3E7E2; --ink-soft:#8A938D; --ink-faint:#69726C;
+  --rule:#262C28; --accent:#7FB39A; --accent-soft:#22302A;
+  --danger:#D98B84; --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"Assistant","Segoe UI",system-ui,-apple-system,sans-serif;
+  font-size:16px; line-height:1.5;
+  -webkit-text-size-adjust:100%; overflow-wrap:break-word;
+  padding-top:env(safe-area-inset-top);
+}
+.wrap{max-width:38rem;margin:0 auto;padding:0 1.1rem 5rem}
+
+header{
+  position:sticky;top:0;z-index:20;background:var(--paper);
+  padding:.9rem 0 .5rem;display:flex;align-items:center;gap:.5rem;
+}
+h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
+.dot{
+  width:.42rem;height:.42rem;border-radius:50%;
+  background:var(--ink-faint);display:inline-block;
+  margin-inline-start:.45rem;vertical-align:.08rem;
+}
+.dot.on{background:var(--accent)}
+.dot.warn{background:var(--danger)}
+.iconbtn{
+  appearance:none;border:0;background:transparent;color:var(--ink-soft);
+  width:2.25rem;height:2.25rem;border-radius:.6rem;
+  display:grid;place-items:center;cursor:pointer;font-size:1.05rem;line-height:1;
+}
+.iconbtn:hover{background:var(--surface);color:var(--ink)}
+.iconbtn[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent)}
+.iconbtn svg{width:1.15rem;height:1.15rem;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+.searchbar{display:none;padding:0 0 .6rem}
+.searchbar.open{display:block}
+.searchbar input{
+  width:100%;padding:.6rem .85rem;border-radius:.6rem;
+  border:1px solid var(--rule);background:var(--surface);
+  color:var(--ink);font:inherit;font-size:.95rem;
+}
+.searchbar input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.searchmeta{font-size:.8rem;color:var(--ink-faint);padding:.4rem .2rem 0}
+
+.composer{padding:.2rem 0 1.4rem}
+.composer textarea{
+  width:100%;min-height:5.5rem;resize:none;
+  padding:.9rem 1rem;border-radius:.75rem;
+  border:1px solid var(--rule);background:var(--surface);
+  color:var(--ink);box-shadow:var(--shadow);
+  font-family:"David Libre",Georgia,serif;font-size:1.05rem;line-height:1.7;
+}
+.composer textarea::placeholder{color:var(--ink-faint);font-family:"Assistant",sans-serif;font-size:.95rem}
+.composer textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.composer-row{display:flex;align-items:center;gap:.75rem;padding-top:.6rem}
+.hint{flex:1;font-size:.78rem;color:var(--ink-faint)}
+.save{
+  appearance:none;border:0;cursor:pointer;background:var(--accent);color:var(--paper);
+  padding:.5rem 1.35rem;border-radius:.6rem;font:inherit;font-size:.92rem;font-weight:600;
+}
+.save:disabled{opacity:.4;cursor:default}
+
+.daygroup{padding-bottom:1.6rem}
+.dayhead{font-size:.8rem;font-weight:600;color:var(--ink-soft);padding:.3rem 0 1rem}
+.entry{padding-bottom:1.5rem}
+.entry-top{display:flex;align-items:center;gap:.7rem;padding-bottom:.45rem}
+.entry-time{
+  font-size:1.15rem;font-weight:200;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;letter-spacing:.02em;direction:ltr;
+}
+.entry-rule{flex:1;height:1px;background:var(--rule)}
+.entry-menu{
+  appearance:none;border:0;background:transparent;cursor:pointer;
+  color:var(--ink-faint);font-size:1rem;line-height:1;padding:.15rem .35rem;border-radius:.35rem;
+}
+.entry-menu:hover{color:var(--ink);background:var(--surface)}
+.entry-text{margin:0;font-family:"David Libre",Georgia,serif;font-size:1.05rem;line-height:1.75;white-space:pre-wrap}
+.entry-text mark{background:var(--accent-soft);color:inherit;border-radius:.15rem;padding:0 .1em}
+.entry-edit textarea{
+  width:100%;min-height:6rem;resize:vertical;padding:.8rem .9rem;border-radius:.6rem;
+  border:1px solid var(--accent);background:var(--surface);color:var(--ink);
+  font-family:"David Libre",Georgia,serif;font-size:1.05rem;line-height:1.75;
+}
+.entry-edit .row{display:flex;gap:.5rem;padding-top:.55rem;align-items:center}
+.tbtn{
+  appearance:none;border:1px solid var(--rule);background:transparent;color:var(--ink-soft);
+  font:inherit;font-size:.85rem;padding:.35rem .85rem;border-radius:.5rem;cursor:pointer;
+}
+.tbtn:hover{color:var(--ink);border-color:var(--ink-soft)}
+.tbtn.primary{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:600}
+.tbtn.danger{color:var(--danger);border-color:transparent;margin-inline-start:auto}
+
+.empty{padding:2.5rem .3rem;color:var(--ink-faint);font-size:.95rem;line-height:1.7}
+
+.scrim{position:fixed;inset:0;background:rgba(10,14,12,.42);z-index:40;display:none}
+.scrim.open{display:block}
+.sheet{
+  position:fixed;inset-inline:0;bottom:0;z-index:50;background:var(--surface);
+  border-radius:1rem 1rem 0 0;
+  padding:.9rem 1.1rem calc(1.4rem + env(safe-area-inset-bottom));
+  max-height:82vh;overflow-y:auto;transform:translateY(101%);
+  transition:transform .22s ease;box-shadow:0 -8px 30px rgba(10,14,12,.16);
+}
+.sheet.open{transform:translateY(0)}
+@media (prefers-reduced-motion: reduce){.sheet{transition:none}}
+.grip{width:2.4rem;height:.22rem;border-radius:99px;background:var(--rule);margin:0 auto .9rem}
+.sheet h2{font-size:.95rem;font-weight:600;margin:0 0 .2rem}
+.sheet .sub{font-size:.82rem;color:var(--ink-faint);margin:0 0 1rem;line-height:1.6}
+.action{
+  display:flex;align-items:center;gap:.75rem;width:100%;
+  appearance:none;border:0;background:transparent;cursor:pointer;
+  color:var(--ink);font:inherit;font-size:.95rem;text-align:start;
+  padding:.75rem .3rem;border-radius:.5rem;
+}
+.action:hover:not(:disabled){background:var(--paper)}
+.action:disabled{color:var(--ink-faint);cursor:default}
+.action .ico{
+  width:1.9rem;height:1.9rem;border-radius:.5rem;flex:none;
+  background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;font-size:.95rem;
+}
+.action .txt{flex:1}
+.action .txt small{display:block;color:var(--ink-faint);font-size:.78rem;line-height:1.5;padding-top:.1rem}
+.divider{height:1px;background:var(--rule);margin:.7rem 0}
+.notice{
+  font-size:.82rem;line-height:1.6;padding:.7rem .8rem;border-radius:.5rem;
+  background:var(--paper);color:var(--ink-soft);border:1px solid var(--rule);margin-top:.4rem;
+}
+.notice.bad{border-color:var(--danger);color:var(--danger)}
+.notice a{color:var(--accent)}
+.backup-item{
+  display:flex;align-items:center;gap:.6rem;width:100%;
+  appearance:none;border:0;background:transparent;cursor:pointer;
+  color:var(--ink);font:inherit;font-size:.9rem;text-align:start;
+  padding:.6rem .3rem;border-radius:.5rem;
+}
+.backup-item:hover{background:var(--paper)}
+.backup-item time{color:var(--ink-faint);font-size:.78rem;display:block;direction:ltr;text-align:start}
+
+.toast{position:fixed;inset-inline:0;bottom:1.1rem;z-index:60;display:flex;justify-content:center;pointer-events:none;padding:0 1rem}
+.toast div{
+  background:var(--ink);color:var(--paper);padding:.6rem 1rem;border-radius:.6rem;
+  font-size:.87rem;line-height:1.5;max-width:32rem;opacity:0;transform:translateY(.5rem);
+  transition:opacity .18s ease, transform .18s ease;
+}
+.toast.show div{opacity:1;transform:translateY(0)}
+@media (prefers-reduced-motion: reduce){.toast div{transition:none}}
+
+.spin{display:inline-block;width:.85rem;height:.85rem;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.spin{animation-duration:2s}}
+
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>יומן<span class="dot" id="syncDot" title="מצב סנכרון"></span></h1>
+    <button class="iconbtn" id="searchBtn" aria-label="חיפוש" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    </button>
+    <button class="iconbtn" id="menuBtn" aria-label="גיבוי ושחזור">
+      <svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+    </button>
+  </header>
+
+  <div class="searchbar" id="searchBar">
+    <input id="searchInput" type="search" placeholder="חיפוש בתוך הרשומות" aria-label="חיפוש בתוך הרשומות" autocomplete="off">
+    <div class="searchmeta" id="searchMeta"></div>
+  </div>
+
+  <div class="composer">
+    <textarea id="composer" placeholder="מה עובר לך בראש?" aria-label="רשומה חדשה" rows="3"></textarea>
+    <div class="composer-row">
+      <span class="hint" id="hint"></span>
+      <button class="save" id="saveBtn" disabled>שמירה</button>
+    </div>
+  </div>
+
+  <main id="list" aria-live="polite"></main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="grip"></div>
+  <h2 id="sheetTitle">גיבוי ושחזור</h2>
+  <p class="sub" id="sheetSub">הרשומות נשמרות במכשיר. גיבוי מסנכרן עותק לתיקייה “Journal Backups” בדרייב שלך.</p>
+
+  <button class="action" id="connectBtn">
+    <span class="ico">◎</span>
+    <span class="txt">חיבור לגוגל דרייב<small id="connectSub">נדרש פעם אחת לכל מכשיר</small></span>
+  </button>
+  <button class="action" id="syncBtn">
+    <span class="ico">↑</span>
+    <span class="txt">סנכרון עכשיו<small id="syncSub">מעדכן את קובץ הגיבוי הראשי</small></span>
+  </button>
+  <button class="action" id="snapshotBtn">
+    <span class="ico">⧉</span>
+    <span class="txt">שמירת גרסה מתוארכת<small>עותק נפרד שלא נדרס</small></span>
+  </button>
+  <button class="action" id="restoreBtn">
+    <span class="ico">↓</span>
+    <span class="txt">שחזור מדרייב<small>מוסיף רשומות שחסרות — לא מוחק כלום</small></span>
+  </button>
+  <div class="divider"></div>
+  <button class="action" id="exportBtn">
+    <span class="ico">⤓</span>
+    <span class="txt">הורדת קובץ JSON<small>עותק מקומי למכשיר</small></span>
+  </button>
+  <button class="action" id="importBtn">
+    <span class="ico">⤒</span>
+    <span class="txt">ייבוא מקובץ JSON<small>מיזוג לפי מזהה רשומה</small></span>
+  </button>
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+
+  <div id="sheetNotice"></div>
+  <div id="backupList"></div>
+</div>
+
+<div class="toast" id="toast"><div id="toastText"></div></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
