@@ -79,10 +79,12 @@ async function addEntry(text) {
   scheduleAutoSync();
 }
 
-async function updateEntry(id, text) {
+/** הטקסט והתיקייה נשמרים יחד. "" מוציא את הרשומה מכל תיקייה. */
+async function updateEntry(id, text, folderName) {
   const existing = entries.find((entry) => entry.id === id);
   if (!existing) return;
-  await store.put({ ...existing, text, updatedAtMs: Date.now() });
+  const edited = { ...existing, text, updatedAtMs: Date.now() };
+  await store.put(folders.withFolder(edited, folderName));
   await refreshEntries();
   scheduleAutoSync();
 }
@@ -380,9 +382,10 @@ function wireEntryList() {
         const box = article.querySelector('[data-role="editbox"]');
         const text = box ? box.value.trim() : "";
         if (!text) return view.showToast("רשומה ריקה לא נשמרת");
+        const folderName = article.querySelector('[data-role="folderbox"]').value;
         editingId = null;
         pendingDeleteId = null;
-        return updateEntry(id, text);
+        return updateEntry(id, text, folderName);
       }
 
       case "delete":

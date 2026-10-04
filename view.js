@@ -95,7 +95,7 @@ function highlightMatches(text, query) {
 
 /* ================= רשימת הרשומות ================= */
 
-function entryHtml(entry, { folder, query, editingId, pendingDeleteId }) {
+function entryHtml(entry, { folder, folderNames, query, editingId, pendingDeleteId }) {
   const time = escapeHtml(timeOf.format(new Date(entry.createdAtMs)));
   /* בתוך תיקייה כל הרשומות שלה, ולכן התווית מופיעה רק תחת "הכל". */
   const label =
@@ -120,11 +120,25 @@ function entryHtml(entry, { folder, query, editingId, pendingDeleteId }) {
     `<article class="entry" data-id="${escapeHtml(entry.id)}">${head}` +
     `<div class="entry-edit">` +
     `<textarea data-role="editbox">${escapeHtml(entry.text)}</textarea>` +
+    folderPickHtml(entry.folder || "", folderNames) +
     `<div class="row">` +
     `<button class="tbtn primary" data-act="save">שמירה</button>` +
     `<button class="tbtn" data-act="cancel">ביטול</button>` +
     `<button class="tbtn danger" data-act="delete">${deleteLabel}</button>` +
     `</div></div></article>`
+  );
+}
+
+/** "ללא תיקייה" ראשון, ואחריו התיקיות באותו סדר כמו בשורה. */
+function folderPickHtml(current, folderNames) {
+  const options = ["", ...folderNames].map((name) => {
+    const selected = name === current ? " selected" : "";
+    const label = name ? escapeHtml(name) : "ללא תיקייה";
+    return `<option value="${escapeHtml(name)}"${selected}>${label}</option>`;
+  });
+  return (
+    `<label class="entry-folder-pick">תיקייה ` +
+    `<select data-role="folderbox">${options.join("")}</select></label>`
   );
 }
 
