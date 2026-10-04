@@ -213,15 +213,38 @@ const NEW_FOLDER_FIELD =
   `autocomplete="off" enterkeyhint="done">`;
 
 function chipHtml(name, label, open) {
+  const isOpen = name === open;
+  /* ⋯ רק על התיקייה הפתוחה: לחיצה עליה פותחת שינוי שם ומחיקה. */
+  const more = isOpen && name ? `<span class="chip-more" aria-hidden="true">⋯</span>` : "";
   return (
     `<button class="chip" data-folder="${escapeHtml(name)}" ` +
-    `aria-pressed="${name === open}">${escapeHtml(label)}</button>`
+    `aria-pressed="${isOpen}">${escapeHtml(label)}${more}</button>`
+  );
+}
+
+function managePanelHtml(folder, pendingDelete) {
+  const deleteLabel = pendingDelete ? "לחיצה נוספת תמחק" : "מחיקת התיקייה";
+  const note = pendingDelete
+    ? `<p class="note">הרשומות לא יימחקו. הן יישארו תחת “הכל”, בלי תיקייה.</p>`
+    : "";
+  return (
+    `<div class="folder-panel">` +
+    `<input data-role="renamefolder" value="${escapeHtml(folder)}" maxlength="30" ` +
+    `aria-label="שם התיקייה" autocomplete="off" enterkeyhint="done">` +
+    `<div class="row">` +
+    `<button class="tbtn primary" data-act="rename-folder">שינוי שם</button>` +
+    `<button class="tbtn" data-act="cancel-folder">ביטול</button>` +
+    `<button class="tbtn danger" data-act="delete-folder">${deleteLabel}</button>` +
+    `</div>${note}</div>`
   );
 }
 
 /** מצייר את שורת התיקיות מחדש. שומר את מיקום הגלילה ואת מה שהוקלד,
     כי השורה נבנית מחדש גם אחרי שמירה, כשאולי יש בה שדה פתוח. */
-export function renderFolders({ names, folder, panel }, { focus = false } = {}) {
+export function renderFolders(
+  { names, folder, panel, pendingFolderDelete },
+  { focus = false } = {}
+) {
   const box = byId("folders");
   const oldInput = box.querySelector("input");
   const oldScroll = box.querySelector(".chips")?.scrollLeft ?? 0;
@@ -231,7 +254,9 @@ export function renderFolders({ names, folder, panel }, { focus = false } = {}) 
     ...names.map((name) => chipHtml(name, name, folder)),
     panel === "create" ? NEW_FOLDER_FIELD : NEW_FOLDER_BUTTON,
   ];
-  box.innerHTML = `<div class="chips" role="group" aria-label="תיקיות">${chips.join("")}</div>`;
+  box.innerHTML =
+    `<div class="chips" role="group" aria-label="תיקיות">${chips.join("")}</div>` +
+    (panel === "manage" && folder ? managePanelHtml(folder, pendingFolderDelete) : "");
   box.querySelector(".chips").scrollLeft = oldScroll;
 
   const input = box.querySelector("input");

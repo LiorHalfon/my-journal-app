@@ -11,7 +11,7 @@ Native ES modules, no build step. Each module hides a lot behind a small interfa
 | Module | Owns |
 |---|---|
 | `config.js` | The Google Client ID, and nothing else — the one file a human edits to enable backup. |
-| `entries-store.js` | IndexedDB. `open`/`readAll`/`put`/`remove`/`addMissing`. `readAll()` returns newest-first, so no caller sorts. |
+| `entries-store.js` | IndexedDB. `open`/`readAll`/`put`/`putAll`/`remove`/`addMissing`. `putAll` is one transaction, all-or-nothing. `readAll()` returns newest-first, so no caller sorts. |
 | `folders.js` | Which folders exist, their order (latest entry activity first), which one is open, and the naming rule. An entry's folder is a plain `folder` name on the entry; this module keeps per-device records in `localStorage` so a folder disappears only when deleted. |
 | `drive.js` | OAuth token lifecycle, folder discovery, multipart upload, the error taxonomy, and the Hebrew messages for it. |
 | `backup-file.js` | The JSON interchange format — the single source of truth for what gets written and what is accepted back. |
@@ -41,7 +41,7 @@ Drive backup stays inert until an OAuth Client ID replaces the placeholder in `c
 
 ## Architecture
 
-**Screen state lives only in `app.js`** (`entries`, `folder`, `folderPanel`, `query`, `editingId`, `pendingDeleteId`). `view.renderEntries()` and `view.renderFolders()` receive that state and rebuild into `innerHTML` — no diffing, no framework. `render()` rebuilds both; search and list clicks call `renderList()` alone, so a half-typed folder name is never rebuilt away. Every mutation follows one shape: `store.put`/`remove` → `refreshEntries()` → `scheduleAutoSync()`.
+**Screen state lives only in `app.js`** (`entries`, `folder`, `folderPanel`, `pendingFolderDelete`, `query`, `editingId`, `pendingDeleteId`). `view.renderEntries()` and `view.renderFolders()` receive that state and rebuild into `innerHTML` — no diffing, no framework. `render()` rebuilds both; search and list clicks call `renderList()` alone, so a half-typed folder name is never rebuilt away. Every mutation follows one shape: `store.put`/`remove` → `refreshEntries()` → `scheduleAutoSync()`.
 
 **Only a successful save clears the composer.** No folder action, render or search writes to `#composer`, and the draft also lives in `localStorage`. The user asked for this explicitly; keep it true.
 
@@ -55,7 +55,7 @@ Drive backup stays inert until an OAuth Client ID replaces the placeholder in `c
 
 **The Drive scope is `drive.file`,** so the app sees only files it created itself. `ensureBackupFolder()`'s search-by-name works solely because the app made that folder — code that expects to read pre-existing user files will fail. Holding this scope is what keeps the project out of Google's app-verification process.
 
-**Sync is last-writer-wins on a single `journal-latest.json`,** updated in place rather than appended. `store.addMissing()` is additive-only, keyed by the client-generated `id`: it adds what is missing and never deletes or overwrites. Deletions do not propagate, and two devices syncing concurrently clobber each other. `scheduleAutoSync()` debounces 20s after a mutation, runs only when a token is already live, and swallows failures on purpose — local data is safe and there is a manual button.
+**Sync is last-writer-wins on a single `journal-latest.json`,** updated in place rather than appended. `store.addMissing()` is additive-only, keyed by the client-generated `id`: it adds what is missing and never deletes or overwrites. Deletions do not propagate, and two devices syncing concurrently clobber each other. For the same reason, renaming or deleting a folder, or moving an entry between folders, does not reach entries another device already has. `scheduleAutoSync()` debounces 20s after a mutation, runs only when a token is already live, and swallows failures on purpose — local data is safe and there is a manual button.
 
 ## Conventions
 

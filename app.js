@@ -22,6 +22,7 @@ const BAD_BACKUP_MESSAGE = "הקובץ לא נקרא כקובץ גיבוי תק�
 let entries = [];
 let folder = "";
 let folderPanel = null;
+let pendingFolderDelete = false;
 let query = "";
 let editingId = null;
 let pendingDeleteId = null;
@@ -47,7 +48,10 @@ function renderList() {
 }
 
 function renderFolderBar({ focus = false } = {}) {
-  view.renderFolders({ names: folders.names(), folder, panel: folderPanel }, { focus });
+  view.renderFolders(
+    { names: folders.names(), folder, panel: folderPanel, pendingFolderDelete },
+    { focus }
+  );
 }
 
 function renderSyncStatus() {
@@ -117,9 +121,17 @@ function openFolder(name) {
 
 function closeFolderPanel() {
   folderPanel = null;
+  pendingFolderDelete = false;
 }
 
+/** לחיצה על התיקייה הפתוחה פותחת או סוגרת את הפאנל שלה. כל תיקייה אחרת נפתחת. */
 function chooseFolder(name) {
+  if (name && name === folder) {
+    const opening = folderPanel !== "manage";
+    closeFolderPanel();
+    if (opening) folderPanel = "manage";
+    return renderFolderBar();
+  }
   openFolder(name);
   render();
 }
@@ -130,6 +142,37 @@ function createFolder(raw) {
   if (name) openFolder(name);
   else closeFolderPanel();
   render();
+}
+
+/** שם ריק לא עושה כלום, ואותו שם רק סוגר את הפאנל. שם של תיקייה אחרת
+    ממזג לתוכה. updatedAtMs לא משתנה, ולכן התיקייה נשארת במקומה בשורה. */
+async function renameFolder(from, raw) {
+  const to = folders.cleanName(raw);
+  if (!to) return;
+  if (to === from) {
+    closeFolderPanel();
+    return renderFolderBar();
+  }
+  const moved = entries
+    .filter((entry) => entry.folder === from)
+    .map((entry) => folders.withFolder(entry, to));
+  await store.putAll(moved);
+  folders.rename(from, to);
+  openFolder(to);
+  await refreshEntries();
+  if (moved.length) scheduleAutoSync();
+}
+
+/** הרשומות לא נמחקות. הן נשארות תחת "הכל", בלי תיקייה. */
+async function deleteFolder(name) {
+  const moved = entries
+    .filter((entry) => entry.folder === name)
+    .map((entry) => folders.withFolder(entry, ""));
+  await store.putAll(moved);
+  folders.forget(name);
+  openFolder("");
+  await refreshEntries();
+  if (moved.length) scheduleAutoSync();
 }
 
 /* ================= פעולות הגיבוי ================= */
@@ -304,9 +347,31 @@ function wireFolderBar() {
     if (chip) return chooseFolder(chip.dataset.folder);
 
     const button = event.target.closest("[data-act]");
-    if (button && button.dataset.act === "new-folder") {
-      folderPanel = "create";
-      renderFolderBar({ focus: true });
+    if (!button) return;
+
+    switch (button.dataset.act) {
+      case "new-folder":
+        closeFolderPanel();
+        folderPanel = "create";
+        return renderFolderBar({ focus: true });
+
+      case "rename-folder":
+        return renameFolder(
+          folder,
+          bar.querySelector('[data-role="renamefolder"]').value
+        );
+
+      case "cancel-folder":
+        closeFolderPanel();
+        return renderFolderBar();
+
+      case "delete-folder":
+        /* מחיקה דורשת לחיצה שנייה, כמו ברשומות. */
+        if (!pendingFolderDelete) {
+          pendingFolderDelete = true;
+          return renderFolderBar();
+        }
+        return deleteFolder(folder);
     }
   });
 
@@ -318,7 +383,11 @@ function wireFolderBar() {
     if (event.key !== "Enter" || event.isComposing) return;
     if (event.target.matches('[data-role="newfolder"]')) {
       event.preventDefault();
-      createFolder(event.target.value);
+      return createFolder(event.target.value);
+    }
+    if (event.target.matches('[data-role="renamefolder"]')) {
+      event.preventDefault();
+      return renameFolder(folder, event.target.value);
     }
   });
 

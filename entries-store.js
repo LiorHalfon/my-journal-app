@@ -48,6 +48,24 @@ export function put(entry) {
   return toPromise(transaction("readwrite").put(entry));
 }
 
+/** כותב כמה רשומות בטרנזקציה אחת: או שכולן נשמרות, או אף אחת. */
+export function putAll(entries) {
+  return new Promise((resolve, reject) => {
+    const writing = db.transaction(STORE_NAME, "readwrite");
+    writing.oncomplete = () => resolve();
+    writing.onerror = (event) => reject(event.target.error);
+    writing.onabort = () => reject(writing.error);
+    try {
+      const objects = writing.objectStore(STORE_NAME);
+      for (const entry of entries) objects.put(entry);
+    } catch (error) {
+      /* רשומה בלי id זורקת מיד. מבטלים, כדי שגם מה שכבר נכתב לא יישמר. */
+      writing.abort();
+      reject(error);
+    }
+  });
+}
+
 export function remove(id) {
   return toPromise(transaction("readwrite").delete(id));
 }
