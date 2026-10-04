@@ -243,7 +243,7 @@ function managePanelHtml(folder, pendingDelete) {
     כי השורה נבנית מחדש גם אחרי שמירה, כשאולי יש בה שדה פתוח. */
 export function renderFolders(
   { names, folder, panel, pendingFolderDelete },
-  { focus = false } = {}
+  { focus = false, reveal = false } = {}
 ) {
   const box = byId("folders");
   const oldInput = box.querySelector("input");
@@ -257,7 +257,9 @@ export function renderFolders(
   box.innerHTML =
     `<div class="chips" role="group" aria-label="תיקיות">${chips.join("")}</div>` +
     (panel === "manage" && folder ? managePanelHtml(folder, pendingFolderDelete) : "");
-  box.querySelector(".chips").scrollLeft = oldScroll;
+  const row = box.querySelector(".chips");
+  row.scrollLeft = oldScroll;
+  if (reveal) revealOpenChip(row);
 
   const input = box.querySelector("input");
   if (!input) return;
@@ -265,6 +267,17 @@ export function renderFolders(
     input.value = oldInput.value;
   }
   if (focus) input.focus();
+}
+
+/** גולל את השורה לבד, בלי לגלול את הדף, עד שהתיקייה הפתוחה נראית.
+    בלי זה, אחרי טעינה או יצירה, אפשר לכתוב לתיקייה שלא רואים. */
+function revealOpenChip(row) {
+  const chip = row.querySelector('[aria-pressed="true"]');
+  if (!chip) return;
+  const edges = row.getBoundingClientRect();
+  const box = chip.getBoundingClientRect();
+  if (box.left < edges.left) row.scrollLeft -= edges.left - box.left;
+  else if (box.right > edges.right) row.scrollLeft += box.right - edges.right;
 }
 
 /* ================= מצב הסנכרון ================= */

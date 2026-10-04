@@ -23,6 +23,8 @@ let entries = [];
 let folder = "";
 let folderPanel = null;
 let pendingFolderDelete = false;
+/* בעלייה, ובכל פעם שנפתחת תיקייה, השורה נגללת אליה. */
+let revealOpenFolder = true;
 let query = "";
 let editingId = null;
 let pendingDeleteId = null;
@@ -50,8 +52,9 @@ function renderList() {
 function renderFolderBar({ focus = false } = {}) {
   view.renderFolders(
     { names: folders.names(), folder, panel: folderPanel, pendingFolderDelete },
-    { focus }
+    { focus, reveal: revealOpenFolder }
   );
+  revealOpenFolder = false;
 }
 
 function renderSyncStatus() {
@@ -117,6 +120,7 @@ function openFolder(name) {
   closeFolderPanel();
   editingId = null;
   pendingDeleteId = null;
+  revealOpenFolder = true;
 }
 
 function closeFolderPanel() {
@@ -124,10 +128,11 @@ function closeFolderPanel() {
   pendingFolderDelete = false;
 }
 
-/** לחיצה על התיקייה הפתוחה פותחת או סוגרת את הפאנל שלה. כל תיקייה אחרת נפתחת. */
+/** לחיצה על התיקייה הפתוחה פותחת או סוגרת את הפאנל שלה. כל תיקייה אחרת נפתחת.
+    לחיצה על "הכל" כשהוא כבר פתוח רק סוגרת שדה פתוח: עריכה פתוחה ברשימה נשארת. */
 function chooseFolder(name) {
-  if (name && name === folder) {
-    const opening = folderPanel !== "manage";
+  if (name === folder) {
+    const opening = name && folderPanel !== "manage";
     closeFolderPanel();
     if (opening) folderPanel = "manage";
     return renderFolderBar();
@@ -376,10 +381,6 @@ function wireFolderBar() {
   });
 
   bar.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && folderPanel) {
-      closeFolderPanel();
-      return renderFolderBar();
-    }
     if (event.key !== "Enter" || event.isComposing) return;
     if (event.target.matches('[data-role="newfolder"]')) {
       event.preventDefault();
@@ -397,6 +398,14 @@ function wireFolderBar() {
      הכפתור שנלחץ כבר הוחלף כשהאירוע מגיע לכאן. */
   document.addEventListener("click", (event) => {
     if (folderPanel !== "create" || event.composedPath().includes(bar)) return;
+    closeFolderPanel();
+    renderFolderBar();
+  });
+
+  /* Escape ברמת המסמך: לחיצה על כפתור בשורה בונה אותה מחדש, והפוקוס נופל
+     ל-body, כך שמאזין על השורה עצמה לא היה שומע אותו. */
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !folderPanel) return;
     closeFolderPanel();
     renderFolderBar();
   });
