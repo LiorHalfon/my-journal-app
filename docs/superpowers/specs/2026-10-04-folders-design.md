@@ -72,6 +72,7 @@ forget(name)            // drops the record
 selected()              // the stored open folder, or "" if it is no longer in names()
 select(name)            // stores the open folder ("" for הכל)
 matches(entry, folder)  // true when folder is "" or entry.folder === folder
+withFolder(entry, name) // a copy of entry in another folder; "" removes the key
 ```
 
 An entry's activity is `Math.max(createdAtMs, updatedAtMs || 0)`.
@@ -106,7 +107,8 @@ The composer guarantee: only the success path of `submit()` writes to `#composer
 
 - `renderFolders(state)` builds `#folders`.
   - The chips are buttons with `data-folder` and `aria-pressed`. The open folder's chip shows ⋯, and tapping it opens the manage panel.
-  - "+ תיקייה" turns into a text input when `folderPanel` is `"create"`. Enter creates the folder. Escape or blur cancels.
+  - "+ תיקייה" turns into a text input when `folderPanel` is `"create"`. Enter creates the folder. Escape, tapping a folder, or tapping anywhere outside the folder row cancels it.
+  - Losing focus alone does not cancel it. On a tap the field loses focus before the click lands, and closing it at that moment shrinks a row that may be scrolled sideways. The row shifts under the pointer and the tap misses the folder. A real-mouse test against a prototype hit exactly this.
   - The manage panel holds a name input, "שינוי שם", "ביטול" and the delete button.
   - The view focuses the input that opens. It renders only on clicks, never on input events, so typing in these fields is never rebuilt away.
 - `renderEntries(state)` filters by `folders.matches` and then by the query.
