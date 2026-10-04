@@ -1,6 +1,8 @@
 /* יומן — פורמט קובץ הגיבוי.
    מקור אמת יחיד לכל מה שיוצא לדרייב או לקובץ מקומי, ולכל מה שנקרא בחזרה. */
 
+import { cleanName } from "./folders.js";
+
 const APP_ID = "tiny-journal";
 const SCHEMA = 1;
 
@@ -35,13 +37,17 @@ function isUsable(entry) {
 function normalize(entry) {
   const createdAtMs =
     entry.createdAtMs || Date.parse(entry.createdAt) || Date.now();
-  return {
+  const normalized = {
     id: entry.id,
     text: entry.text,
     createdAt: entry.createdAt || new Date(createdAtMs).toISOString(),
     createdAtMs,
     updatedAtMs: entry.updatedAtMs,
   };
+  /* תיקייה אופציונלית. שם שלא שורד את הניקוי פשוט לא נכנס. */
+  const folder = cleanName(entry.folder);
+  if (folder) normalized.folder = folder;
+  return normalized;
 }
 
 /** journal-2026-09-01T16-47-30Z.json */

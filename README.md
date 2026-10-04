@@ -113,10 +113,12 @@ python3 -m http.server 8080
   "exportedAt": "2026-09-01T09:16:30.000Z",
   "count": 2,
   "entries": [
-    { "id": "e...", "text": "...", "createdAt": "...", "createdAtMs": 0 }
+    { "id": "e...", "text": "...", "createdAt": "...", "createdAtMs": 0, "folder": "בריאות" }
   ]
 }
 ```
+
+`folder` אופציונלי: רשומה בלי תיקייה פשוט בלי השדה, וקבצים מלפני התיקיות נקראים כמו שהם.
 
 ---
 
