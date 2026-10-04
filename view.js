@@ -2,6 +2,8 @@
    המודול הזה יודע למצוא אלמנטים ולבנות HTML; אף מודול אחר לא צריך.
    כל טקסט שמגיע מהמשתמש עובר ב-escapeHtml לפני שהוא נכנס ל-innerHTML. */
 
+import { matches } from "./folders.js";
+
 export const byId = (id) => document.getElementById(id);
 
 const HTML_ESCAPES = {
@@ -93,10 +95,15 @@ function highlightMatches(text, query) {
 
 /* ================= רשימת הרשומות ================= */
 
-function entryHtml(entry, { query, editingId, pendingDeleteId }) {
+function entryHtml(entry, { folder, query, editingId, pendingDeleteId }) {
   const time = escapeHtml(timeOf.format(new Date(entry.createdAtMs)));
+  /* בתוך תיקייה כל הרשומות שלה, ולכן התווית מופיעה רק תחת "הכל". */
+  const label =
+    !folder && entry.folder
+      ? `<span class="entry-folder">${escapeHtml(entry.folder)}</span>`
+      : "";
   const head =
-    `<div class="entry-top"><span class="entry-time">${time}</span>` +
+    `<div class="entry-top"><span class="entry-time">${time}</span>${label}` +
     `<span class="entry-rule"></span>` +
     `<button class="entry-menu" data-act="edit" aria-label="עריכת הרשומה">⋯</button></div>`;
 
@@ -144,9 +151,10 @@ function groupedByDayHtml(entries, state) {
 
 /** מצייר את הרשימה כולה מחדש מתוך המצב שהועבר. */
 export function renderEntries(state) {
-  const { entries, query, editingId } = state;
+  const { entries, folder, query, editingId } = state;
   const list = byId("list");
-  const shown = entries.filter((entry) => entryMatchesQuery(entry, query));
+  const inFolder = entries.filter((entry) => matches(entry, folder));
+  const shown = inFolder.filter((entry) => entryMatchesQuery(entry, query));
 
   byId("searchMeta").textContent = query
     ? shown.length
@@ -154,14 +162,16 @@ export function renderEntries(state) {
       : "אין התאמות"
     : "";
 
-  if (!entries.length) {
-    list.innerHTML =
-      `<p class="empty">עוד אין כאן כלום.<br>` +
-      `כתוב משהו למעלה — התאריך והשעה נשמרים לבד.</p>`;
+  if (!inFolder.length) {
+    list.innerHTML = folder
+      ? `<p class="empty">עוד אין כאן כלום ב“${escapeHtml(folder)}”.</p>`
+      : `<p class="empty">עוד אין כאן כלום.<br>` +
+        `כתוב משהו למעלה — התאריך והשעה נשמרים לבד.</p>`;
     return;
   }
   if (!shown.length) {
-    list.innerHTML = `<p class="empty">אין רשומה שמתאימה ל“${escapeHtml(query)}”.</p>`;
+    const where = folder ? `ב“${escapeHtml(folder)}” ` : "";
+    list.innerHTML = `<p class="empty">אין רשומה ${where}שמתאימה ל“${escapeHtml(query)}”.</p>`;
     return;
   }
 
@@ -176,6 +186,46 @@ function focusEditBox(list) {
   box.focus();
   box.setSelectionRange(box.value.length, box.value.length);
   autoGrow(box);
+}
+
+/* ================= תיקיות ================= */
+
+const NEW_FOLDER_BUTTON =
+  `<button class="chip chip-add" data-act="new-folder">+ תיקייה</button>`;
+
+const NEW_FOLDER_FIELD =
+  `<input class="chip chip-input" data-role="newfolder" maxlength="30" ` +
+  `placeholder="שם התיקייה" aria-label="שם התיקייה החדשה" ` +
+  `autocomplete="off" enterkeyhint="done">`;
+
+function chipHtml(name, label, open) {
+  return (
+    `<button class="chip" data-folder="${escapeHtml(name)}" ` +
+    `aria-pressed="${name === open}">${escapeHtml(label)}</button>`
+  );
+}
+
+/** מצייר את שורת התיקיות מחדש. שומר את מיקום הגלילה ואת מה שהוקלד,
+    כי השורה נבנית מחדש גם אחרי שמירה, כשאולי יש בה שדה פתוח. */
+export function renderFolders({ names, folder, panel }, { focus = false } = {}) {
+  const box = byId("folders");
+  const oldInput = box.querySelector("input");
+  const oldScroll = box.querySelector(".chips")?.scrollLeft ?? 0;
+
+  const chips = [
+    chipHtml("", "הכל", folder),
+    ...names.map((name) => chipHtml(name, name, folder)),
+    panel === "create" ? NEW_FOLDER_FIELD : NEW_FOLDER_BUTTON,
+  ];
+  box.innerHTML = `<div class="chips" role="group" aria-label="תיקיות">${chips.join("")}</div>`;
+  box.querySelector(".chips").scrollLeft = oldScroll;
+
+  const input = box.querySelector("input");
+  if (!input) return;
+  if (oldInput && oldInput.dataset.role === input.dataset.role) {
+    input.value = oldInput.value;
+  }
+  if (focus) input.focus();
 }
 
 /* ================= מצב הסנכרון ================= */

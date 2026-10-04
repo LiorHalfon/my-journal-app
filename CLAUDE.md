@@ -12,6 +12,7 @@ Native ES modules, no build step. Each module hides a lot behind a small interfa
 |---|---|
 | `config.js` | The Google Client ID, and nothing else — the one file a human edits to enable backup. |
 | `entries-store.js` | IndexedDB. `open`/`readAll`/`put`/`remove`/`addMissing`. `readAll()` returns newest-first, so no caller sorts. |
+| `folders.js` | Which folders exist, their order (latest entry activity first), which one is open, and the naming rule. An entry's folder is a plain `folder` name on the entry; this module keeps per-device records in `localStorage` so a folder disappears only when deleted. |
 | `drive.js` | OAuth token lifecycle, folder discovery, multipart upload, the error taxonomy, and the Hebrew messages for it. |
 | `backup-file.js` | The JSON interchange format — the single source of truth for what gets written and what is accepted back. |
 | `view.js` | Every DOM read and write, all HTML building, and date formatting. No other module touches the DOM. |
@@ -40,7 +41,11 @@ Drive backup stays inert until an OAuth Client ID replaces the placeholder in `c
 
 ## Architecture
 
-**Screen state lives only in `app.js`** (`entries`, `query`, `editingId`, `pendingDeleteId`). `view.renderEntries()` receives that state and rebuilds the whole list into `innerHTML` — no diffing, no framework. Every mutation follows one shape: `store.put`/`remove` → `refreshEntries()` → `scheduleAutoSync()`.
+**Screen state lives only in `app.js`** (`entries`, `folder`, `folderPanel`, `query`, `editingId`, `pendingDeleteId`). `view.renderEntries()` and `view.renderFolders()` receive that state and rebuild into `innerHTML` — no diffing, no framework. `render()` rebuilds both; search and list clicks call `renderList()` alone, so a half-typed folder name is never rebuilt away. Every mutation follows one shape: `store.put`/`remove` → `refreshEntries()` → `scheduleAutoSync()`.
+
+**Only a successful save clears the composer.** No folder action, render or search writes to `#composer`, and the draft also lives in `localStorage`. The user asked for this explicitly; keep it true.
+
+**The new-folder field closes on a tap outside the folder row, never on blur.** A tap blurs the field before its click lands, and closing the field then shifts a sideways-scrolled row, so the tap misses the folder.
 
 **Everything interpolated into HTML passes through `escapeHtml()` in `view.js`.** `highlightMatches()` escapes first, then wraps matches in `<mark>`. Building markup anywhere else means re-deriving this, which is why the DOM stays in one module.
 

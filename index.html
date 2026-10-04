@@ -95,6 +95,21 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 }
 .save:disabled{opacity:.4;cursor:default}
 
+.folders{padding-top:.5rem}
+.chips{display:flex;gap:.4rem;overflow-x:auto;padding-block:.3rem;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  appearance:none;flex:none;display:inline-flex;align-items:center;gap:.35rem;
+  min-height:2.75rem;padding:0 1rem;border-radius:99px;cursor:pointer;
+  border:1px solid var(--rule);background:transparent;color:var(--ink-soft);
+  font:inherit;font-size:.9rem;white-space:nowrap;
+}
+.chip:hover{color:var(--ink);border-color:var(--ink-soft)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent);font-weight:600}
+.chip-add{border-style:dashed}
+.chip-input{width:10rem;cursor:text;background:var(--surface);color:var(--ink);border-color:var(--accent)}
+.chip-input::placeholder{color:var(--ink-faint)}
+
 .daygroup{padding-bottom:1.6rem}
 .dayhead{font-size:.8rem;font-weight:600;color:var(--ink-soft);padding:.3rem 0 1rem}
 .entry{padding-bottom:1.5rem}
@@ -104,6 +119,11 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
   font-variant-numeric:tabular-nums;letter-spacing:.02em;direction:ltr;
 }
 .entry-rule{flex:1;height:1px;background:var(--rule)}
+.entry-folder{
+  font-size:.75rem;color:var(--accent);background:var(--accent-soft);
+  padding:.05rem .55rem;border-radius:99px;white-space:nowrap;
+  max-width:45%;overflow:hidden;text-overflow:ellipsis;
+}
 .entry-menu{
   appearance:none;border:0;background:transparent;cursor:pointer;
   color:var(--ink-faint);font-size:1rem;line-height:1;padding:.15rem .35rem;border-radius:.35rem;
@@ -212,6 +232,7 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 
   <div class="composer">
     <textarea id="composer" placeholder="מה עובר לך בראש?" aria-label="רשומה חדשה" rows="3"></textarea>
+    <div class="folders" id="folders"></div>
     <div class="composer-row">
       <span class="hint" id="hint"></span>
       <button class="save" id="saveBtn" disabled>שמירה</button>

@@ -14,6 +14,7 @@ const SHELL_FILES = [
   "./app.js",
   "./config.js",
   "./local-storage.js",
+  "./folders.js",
   "./entries-store.js",
   "./backup-file.js",
   "./drive.js",

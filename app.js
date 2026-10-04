@@ -5,6 +5,7 @@
 import * as store from "./entries-store.js";
 import * as drive from "./drive.js";
 import * as view from "./view.js";
+import * as folders from "./folders.js";
 import {
   serializeEntries,
   readEntries,
@@ -19,6 +20,8 @@ const BAD_BACKUP_MESSAGE = "הקובץ לא נקרא כקובץ גיבוי תק�
 /* ================= מצב המסך ================= */
 
 let entries = [];
+let folder = "";
+let folderPanel = null;
 let query = "";
 let editingId = null;
 let pendingDeleteId = null;
@@ -26,7 +29,25 @@ let busy = false;
 let autoSyncTimer = null;
 
 function render() {
-  view.renderEntries({ entries, query, editingId, pendingDeleteId });
+  renderFolderBar();
+  renderList();
+}
+
+/** הרשימה לבד. חיפוש ועריכה לא בונים מחדש את שורת התיקיות,
+    כדי לא למחוק שם תיקייה שבאמצע הקלדה. */
+function renderList() {
+  view.renderEntries({
+    entries,
+    folder,
+    folderNames: folders.names(),
+    query,
+    editingId,
+    pendingDeleteId,
+  });
+}
+
+function renderFolderBar({ focus = false } = {}) {
+  view.renderFolders({ names: folders.names(), folder, panel: folderPanel }, { focus });
 }
 
 function renderSyncStatus() {
@@ -38,19 +59,22 @@ function renderSyncStatus() {
 
 async function refreshEntries() {
   entries = await store.readAll();
+  folders.learn(entries);
   render();
 }
 
 /* ================= רשומות ================= */
 
+/** נשמרת לתוך התיקייה הפתוחה, או בלי תיקייה כשפתוח "הכל". */
 async function addEntry(text) {
   const now = new Date();
-  await store.put({
+  const entry = {
     id: store.createEntryId(),
     text,
     createdAt: now.toISOString(),
     createdAtMs: now.getTime(),
-  });
+  };
+  await store.put(folders.withFolder(entry, folder));
   await refreshEntries();
   scheduleAutoSync();
 }
@@ -76,6 +100,34 @@ function scheduleAutoSync() {
   autoSyncTimer = setTimeout(() => {
     drive.syncLatestIfConnected(serializeEntries(entries));
   }, AUTO_SYNC_DELAY_MS);
+}
+
+/* ================= תיקיות ================= */
+
+/** פותח תיקייה ("" היא הכל) וסוגר את מה שהיה פתוח. לא מצייר. */
+function openFolder(name) {
+  folder = name;
+  folders.select(name);
+  closeFolderPanel();
+  editingId = null;
+  pendingDeleteId = null;
+}
+
+function closeFolderPanel() {
+  folderPanel = null;
+}
+
+function chooseFolder(name) {
+  openFolder(name);
+  render();
+}
+
+/** שם ריק סוגר את השדה. שם שכבר קיים פותח את התיקייה הקיימת. */
+function createFolder(raw) {
+  const name = folders.create(raw);
+  if (name) openFolder(name);
+  else closeFolderPanel();
+  render();
 }
 
 /* ================= פעולות הגיבוי ================= */
@@ -242,6 +294,43 @@ function wireComposer() {
   }
 }
 
+function wireFolderBar() {
+  const bar = view.byId("folders");
+
+  bar.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-folder]");
+    if (chip) return chooseFolder(chip.dataset.folder);
+
+    const button = event.target.closest("[data-act]");
+    if (button && button.dataset.act === "new-folder") {
+      folderPanel = "create";
+      renderFolderBar({ focus: true });
+    }
+  });
+
+  bar.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && folderPanel) {
+      closeFolderPanel();
+      return renderFolderBar();
+    }
+    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.target.matches('[data-role="newfolder"]')) {
+      event.preventDefault();
+      createFolder(event.target.value);
+    }
+  });
+
+  /* נגיעה מחוץ לשורה סוגרת את שדה התיקייה החדשה. לא סוגרים כשהשדה מאבד
+     פוקוס: זה קורה לפני שהלחיצה נוחתת, וסגירת השדה מזיזה שורה גלולה, כך
+     שהלחיצה על תיקייה הייתה נופלת לידה. composedPath ולא contains, כי
+     הכפתור שנלחץ כבר הוחלף כשהאירוע מגיע לכאן. */
+  document.addEventListener("click", (event) => {
+    if (folderPanel !== "create" || event.composedPath().includes(bar)) return;
+    closeFolderPanel();
+    renderFolderBar();
+  });
+}
+
 function wireSearch() {
   const bar = view.byId("searchBar");
   const input = view.byId("searchInput");
@@ -257,12 +346,12 @@ function wireSearch() {
     }
     input.value = "";
     query = "";
-    render();
+    renderList();
   });
 
   input.addEventListener("input", (event) => {
     query = event.target.value.trim();
-    render();
+    renderList();
   });
 }
 
@@ -280,12 +369,12 @@ function wireEntryList() {
       case "edit":
         editingId = id;
         pendingDeleteId = null;
-        return render();
+        return renderList();
 
       case "cancel":
         editingId = null;
         pendingDeleteId = null;
-        return render();
+        return renderList();
 
       case "save": {
         const box = article.querySelector('[data-role="editbox"]');
@@ -300,7 +389,7 @@ function wireEntryList() {
         /* מחיקה דורשת לחיצה שנייה. */
         if (pendingDeleteId !== id) {
           pendingDeleteId = id;
-          return render();
+          return renderList();
         }
         editingId = null;
         pendingDeleteId = null;
@@ -382,7 +471,9 @@ function registerServiceWorker() {
 }
 
 async function boot() {
+  folder = folders.selected();
   wireComposer();
+  wireFolderBar();
   wireSearch();
   wireEntryList();
   wireBackupSheet();

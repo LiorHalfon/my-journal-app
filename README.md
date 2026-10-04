@@ -9,6 +9,7 @@ index.html            שלד + עיצוב
 config.js             ה-Client ID. הקובץ היחיד שצריך לגעת בו.
 app.js                חיווט: מצב המסך, אירועים, עלייה
 entries-store.js      הרשומות ב-IndexedDB
+folders.js            תיקיות: אילו קיימות, הסדר שלהן, ואיזו פתוחה
 drive.js              חיבור לגוגל וקריאות דרייב
 backup-file.js        פורמט קובץ הגיבוי
 view.js               כל מה שנוגע ל-DOM
