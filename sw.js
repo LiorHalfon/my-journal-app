@@ -2,6 +2,12 @@
    מטרה: האפליקציה נפתחת ועובדת בלי רשת. הרשומות עצמן ב-IndexedDB,
    כאן רק שלד האפליקציה והפונטים. */
 
+import * as store from "./entries-store.js";
+import { SYNC_TAG, backupIfChanged } from "./backup.js";
+
+/* sw.js הוא מודול: כל import כאן חייב להיות קיים, ובלי DOM.
+   import שנכשל מפיל את ההתקנה, והאופליין מת בשקט. */
+
 const VERSION = "v3";
 const SHELL = "journal-shell-" + VERSION;
 
@@ -80,4 +86,12 @@ self.addEventListener("fetch", (event) => {
   if (url.origin === self.location.origin) {
     event.respondWith(networkFirst(req, req));
   }
+});
+
+/* Background Sync: כשהגיבוי נכשל בלי רשת, הדף רושם תג, והדפדפן מפעיל
+   אותו כשהרשת חוזרת, גם כשהאפליקציה סגורה. דחייה גורמת לניסיון חוזר;
+   "not-ready" ו-"remote-exists" מסתיימים בלי שגיאה, אז הניסיונות נעצרים. */
+self.addEventListener("sync", (event) => {
+  if (event.tag !== SYNC_TAG) return;
+  event.waitUntil(store.open().then(() => backupIfChanged()));
 });

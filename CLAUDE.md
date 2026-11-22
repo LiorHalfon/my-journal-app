@@ -39,6 +39,8 @@ python3 -m http.server 8080   # then http://localhost:8080
 
 **`SHELL_FILES` in `sw.js` must match real paths.** `cache.addAll()` rejects atomically, so one 404 fails the whole install — and `register()` in `app.js` swallows the rejection, so offline dies with no visible symptom while the app keeps working online. Adding a shell file means verifying it actually serves.
 
+**`sw.js` is a module.** Its static imports (`entries-store.js`, `backup.js` and everything they import) must exist and stay free of DOM, `window` and direct `localStorage`. A failed import fails the worker's install, and offline dies silently, like a bad `SHELL_FILES` entry.
+
 ## Architecture
 
 **Screen state lives only in `app.js`** (`entries`, `folder`, `folderPanel`, `pendingFolderDelete`, `query`, `editingId`, `pendingDeleteId`, and for the backup sheet `setupPanel`, `pendingCode`, `setupError`, `backupBlocked`). `view.renderEntries()` and `view.renderFolders()` receive that state and rebuild into `innerHTML` — no diffing, no framework. `render()` rebuilds both; search and list clicks call `renderList()` alone, so a half-typed folder name is never rebuilt away. In the same way only setup actions call `renderBackupSetup()`, so a status refresh never wipes a half-typed repo or token. Every mutation follows one shape: `store.put`/`remove` → `refreshEntries()` → `scheduleBackup()`.

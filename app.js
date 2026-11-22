@@ -127,9 +127,19 @@ async function backupQuietly() {
     backupBlocked = result === "remote-exists";
     await renderBackupStatus();
     return result;
-  } catch {
+  } catch (error) {
+    if (error?.kind === "offline" || error?.kind === "busy") requestBackgroundSync();
     return null;
   }
+}
+
+/** מבקש מהדפדפן לנסות שוב בחזרת הרשת, גם כשהאפליקציה סגורה (Android).
+    בלי SyncManager או בכישלון: לא קורה כלום. */
+function requestBackgroundSync() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready
+    .then((reg) => reg.sync?.register(backup.SYNC_TAG))
+    .catch(() => {});
 }
 
 /* ================= תיקיות ================= */
@@ -591,11 +601,14 @@ function wireBackupSetup() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", () => {
+  const register = () => {
     navigator.serviceWorker
-      .register("sw.js")
+      .register("sw.js", { type: "module" })
       .catch((error) => console.warn("service worker registration failed", error));
-  });
+  };
+  /* boot() קורא לכאן אחרי awaits, אז "load" כבר יכול היה לעבור. */
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register);
 }
 
 async function boot() {
