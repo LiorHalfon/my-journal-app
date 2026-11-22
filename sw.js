@@ -2,7 +2,7 @@
    מטרה: האפליקציה נפתחת ועובדת בלי רשת. הרשומות עצמן ב-IndexedDB,
    כאן רק שלד האפליקציה והפונטים. */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL = "journal-shell-" + VERSION;
 const FONTS = "journal-fonts-" + VERSION;
 
@@ -12,12 +12,14 @@ const SHELL_FILES = [
   "./",
   "./index.html",
   "./app.js",
-  "./config.js",
   "./local-storage.js",
   "./folders.js",
   "./entries-store.js",
   "./backup-file.js",
-  "./drive.js",
+  "./vault.js",
+  "./github.js",
+  "./backup-store.js",
+  "./backup.js",
   "./view.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -66,12 +68,6 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-
-  // אף פעם לא לשמור בקאש קריאות מול גוגל — טוקנים ונתוני דרייב חייבים להיות טריים.
-  if (
-    url.hostname.endsWith("googleapis.com") ||
-    url.hostname === "accounts.google.com"
-  ) return;
 
   // פונטים: מהקאש קודם, ורענון ברקע.
   if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {

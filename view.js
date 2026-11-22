@@ -280,19 +280,175 @@ function revealOpenChip(row) {
   else if (box.right > edges.right) row.scrollLeft += box.right - edges.right;
 }
 
-/* ================= מצב הסנכרון ================= */
+/* ================= מצב הגיבוי ================= */
 
-export function renderSyncStatus({ connected, lastSyncAt }) {
-  const dot = byId("syncDot");
-  dot.className = "dot" + (connected ? " on" : "");
+const STALE_AFTER_DAYS = 3;
+const REMOTE_EXISTS =
+  "במאגר כבר יש גיבוי. שחזר ממנו קודם, ואז הגיבוי מהמכשיר הזה ימשיך ממנו.";
 
-  if (!connected) {
-    dot.title = "לא מחובר לדרייב";
-    return;
+/** אחת מחמש שורות המצב: הטקסט בגיליון, הכותרת של הנקודה, והצבע שלה. */
+function backupStatusOf({ kid, repo, confirmedAt, blocked }) {
+  if (!kid || !repo) {
+    return {
+      dot: "",
+      title: "גיבוי לא הוגדר",
+      text: "הגיבוי עוד לא הוגדר. הרשומות שמורות רק במכשיר הזה.",
+    };
   }
-  dot.title = lastSyncAt
-    ? "סונכרן לאחרונה: " + shortStampOf.format(new Date(lastSyncAt))
-    : "מחובר לדרייב";
+  if (blocked) return { dot: "warn", title: REMOTE_EXISTS, text: REMOTE_EXISTS };
+  if (!confirmedAt) return { dot: "", title: "עוד לא גובה", text: "עוד לא גובה." };
+
+  const days = Math.floor((Date.now() - confirmedAt) / ONE_DAY_MS);
+  if (days >= STALE_AFTER_DAYS) {
+    const late = `הגיבוי האחרון לפני ${days} ימים`;
+    return { dot: "warn", title: late, text: late + "." };
+  }
+  const fresh = "גובה לאחרונה: " + shortStampOf.format(new Date(confirmedAt));
+  return { dot: "on", title: fresh, text: fresh };
+}
+
+/** הנקודה בכותרת, שורת המצב בגיליון, והכפתור "גיבוי עכשיו". */
+export function renderBackupStatus(state) {
+  const { dot, title, text } = backupStatusOf(state);
+  const marker = byId("syncDot");
+  marker.className = dot ? `dot ${dot}` : "dot";
+  marker.title = title;
+
+  const sub = byId("sheetSub");
+  sub.textContent = text;
+  sub.classList.toggle("warn", dot === "warn");
+
+  byId("backupBtn").disabled = !(state.kid && state.repo);
+}
+
+/* ================= הגדרת הגיבוי ================= */
+
+/* הקוד, המאגר והטוקן נכתבים משמאל לימין, בלי השלמה ובלי תיקון אוטומטי. */
+const FIELD_ATTRS =
+  `autocomplete="off" spellcheck="false" autocapitalize="off" dir="ltr"`;
+
+function fieldHtml(role, placeholder, { type = "text", value = "" } = {}) {
+  return (
+    `<input type="${escapeHtml(type)}" data-role="${escapeHtml(role)}" ` +
+    `value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" ` +
+    `aria-label="${escapeHtml(placeholder)}" ${FIELD_ATTRS}>`
+  );
+}
+
+function setupButtonHtml(act, label, kind = "") {
+  const style = kind ? `tbtn ${kind}` : "tbtn";
+  return `<button class="${style}" data-act="${escapeHtml(act)}">${escapeHtml(label)}</button>`;
+}
+
+function setupErrorHtml(error) {
+  return error ? `<div class="notice bad">${escapeHtml(error)}</div>` : "";
+}
+
+function setupActionHtml(act, icon, label, small) {
+  return (
+    `<button class="action" data-act="${escapeHtml(act)}">` +
+    `<span class="ico">${escapeHtml(icon)}</span>` +
+    `<span class="txt">${escapeHtml(label)}<small>${escapeHtml(small)}</small></span></button>`
+  );
+}
+
+/** שורה של מה שכבר הוגדר, עם כפתור להחלפה. textHtml כבר מוברח. */
+function setupLineHtml(textHtml, act, label) {
+  return (
+    `<div class="setup-line"><span class="ico">✓</span>` +
+    `<span class="txt">${textHtml}</span>${setupButtonHtml(act, label)}</div>`
+  );
+}
+
+/** הקוד בקבוצות של ארבעה. השורה נשברת רק בין קבוצות. */
+function recoveryCodeHtml(code) {
+  const groups = String(code).split("-").map((group) => escapeHtml(group));
+  return `<div class="code" dir="ltr">${groups.join("-<wbr>")}</div>`;
+}
+
+function keySectionHtml({ kid, panel, code, error }) {
+  if (panel === "new-key") {
+    const replacing = kid
+      ? `<p class="note">גיבויים קודמים יישארו נעולים במפתח הישן.</p>`
+      : "";
+    return (
+      `<div class="folder-panel">` +
+      `<p class="panel-head">קוד השחזור שלך</p>` +
+      recoveryCodeHtml(code) +
+      `<p class="note">שמור אותו במנהל הסיסמאות. בלי הקוד ובלי הטלפון אי אפשר לפתוח ` +
+      `את הגיבוי, ואף אחד לא יכול לאפס אותו.</p>` +
+      replacing +
+      setupErrorHtml(error) +
+      `<div class="row">` +
+      setupButtonHtml("copy-code", "העתקה") +
+      setupButtonHtml("confirm-code", "שמרתי את הקוד", "primary") +
+      setupButtonHtml("cancel-setup", "ביטול") +
+      `</div></div>`
+    );
+  }
+  if (panel === "enter-code") {
+    return (
+      `<div class="folder-panel">` +
+      fieldHtml("codebox", "קוד השחזור") +
+      setupErrorHtml(error) +
+      `<div class="row">` +
+      setupButtonHtml("save-code", "שמירה", "primary") +
+      setupButtonHtml("cancel-setup", "ביטול") +
+      `</div></div>`
+    );
+  }
+  if (kid) {
+    return setupLineHtml(
+      `מפתח פעיל · <span dir="ltr">${escapeHtml(kid)}</span>`,
+      "new-key",
+      "מפתח חדש"
+    );
+  }
+  return (
+    setupActionHtml("new-key", "+", "יצירת מפתח", "קוד שחזור לשמירה במנהל הסיסמאות") +
+    setupActionHtml("enter-code", "↵", "יש לי קוד שחזור", "למכשיר חדש, או אחרי התקנה מחדש")
+  );
+}
+
+/** בלי מאגר הטופס פתוח תמיד. עם מאגר, "שינוי" פותח אותו עם המאגר הנוכחי. */
+function accountSectionHtml({ repo, panel, error }) {
+  if (repo && panel !== "account") {
+    return setupLineHtml(
+      `<span dir="ltr">${escapeHtml(repo)}</span>`,
+      "edit-account",
+      "שינוי"
+    );
+  }
+  return (
+    `<div class="folder-panel">` +
+    fieldHtml("repobox", "owner/repo", { value: repo ?? "" }) +
+    fieldHtml("tokenbox", "טוקן גישה", { type: "password" }) +
+    `<p class="note">מאגר פרטי, וטוקן שיש לו גישה רק אליו.</p>` +
+    setupErrorHtml(panel === "account" ? error : null) +
+    `<div class="row">` +
+    setupButtonHtml("save-account", "שמירה", "primary") +
+    (repo ? setupButtonHtml("cancel-setup", "ביטול") : "") +
+    `</div></div>`
+  );
+}
+
+/** מצייר מחדש רק את #backupSetup. פאנל אחד פתוח בכל רגע: בזמן שפאנל של המפתח
+    פתוח, המאגר מוסתר. מה שהוקלד בשדה שנשאר שורד את הבנייה מחדש. */
+export function renderBackupSetup({ kid, repo, panel, code, error }) {
+  const box = byId("backupSetup");
+  const typed = new Map(
+    [...box.querySelectorAll("input")].map((input) => [input.dataset.role, input.value])
+  );
+
+  const keyPanelOpen = panel === "new-key" || panel === "enter-code";
+  box.innerHTML =
+    `<h3>מפתח הצפנה</h3>` +
+    keySectionHtml({ kid, panel, code, error }) +
+    (keyPanelOpen ? "" : `<h3>מאגר GitHub</h3>` + accountSectionHtml({ repo, panel, error }));
+
+  for (const input of box.querySelectorAll("input")) {
+    if (typed.has(input.dataset.role)) input.value = typed.get(input.dataset.role);
+  }
 }
 
 /* ================= הודעות ================= */

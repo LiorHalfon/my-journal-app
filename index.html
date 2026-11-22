@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>יומן</title>
-<meta name="description" content="יומן אישי מינימליסטי עם גיבוי לגוגל דרייב">
+<meta name="description" content="יומן אישי מינימליסטי עם גיבוי מוצפן">
 <meta name="theme-color" content="#E9EBE8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121614" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
@@ -183,7 +183,7 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 }
 .action:hover:not(:disabled){background:var(--paper)}
 .action:disabled{color:var(--ink-faint);cursor:default}
-.action .ico{
+.action .ico,.setup-line .ico{
   width:1.9rem;height:1.9rem;border-radius:.5rem;flex:none;
   background:var(--accent-soft);color:var(--accent);
   display:grid;place-items:center;font-size:.95rem;
@@ -197,6 +197,21 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 }
 .notice.bad{border-color:var(--danger);color:var(--danger)}
 .notice a{color:var(--accent)}
+.sheet .sub.warn{color:var(--danger)}
+.setup{padding-bottom:.4rem}
+.setup h3{font-size:.8rem;font-weight:600;color:var(--ink-soft);margin:.9rem 0 .2rem}
+.setup h3:first-child{margin-top:0}
+.setup-line{display:flex;align-items:center;gap:.75rem;padding:.35rem .3rem;font-size:.95rem}
+.setup-line .txt{flex:1;min-width:0}
+.setup-line .tbtn{min-height:2.75rem}
+.setup .folder-panel input + input{margin-top:.5rem}
+.setup input:placeholder-shown{direction:rtl}
+.setup .panel-head{margin:0 0 .5rem;font-size:.9rem;font-weight:600}
+.code{
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:1rem;line-height:1.9;letter-spacing:.04em;
+  padding:.55rem .8rem;border-radius:.5rem;border:1px solid var(--rule);background:var(--paper);
+  -webkit-user-select:all;user-select:all;overflow-wrap:anywhere;
+}
 .backup-item{
   display:flex;align-items:center;gap:.6rem;width:100%;
   appearance:none;border:0;background:transparent;cursor:pointer;
@@ -230,7 +245,7 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 <body>
 <div class="wrap">
   <header>
-    <h1>יומן<span class="dot" id="syncDot" title="מצב סנכרון"></span></h1>
+    <h1>יומן<span class="dot" id="syncDot" title="גיבוי לא הוגדר"></span></h1>
     <button class="iconbtn" id="searchBtn" aria-label="חיפוש" aria-expanded="false">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     </button>
@@ -260,23 +275,13 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="grip"></div>
   <h2 id="sheetTitle">גיבוי ושחזור</h2>
-  <p class="sub" id="sheetSub">הרשומות נשמרות במכשיר. גיבוי מסנכרן עותק לתיקייה “Journal Backups” בדרייב שלך.</p>
+  <p class="sub" id="sheetSub">הגיבוי עוד לא הוגדר. הרשומות שמורות רק במכשיר הזה.</p>
 
-  <button class="action" id="connectBtn">
-    <span class="ico">◎</span>
-    <span class="txt">חיבור לגוגל דרייב<small id="connectSub">נדרש פעם אחת לכל מכשיר</small></span>
-  </button>
-  <button class="action" id="syncBtn">
+  <div class="setup" id="backupSetup"></div>
+
+  <button class="action" id="backupBtn" disabled>
     <span class="ico">↑</span>
-    <span class="txt">סנכרון עכשיו<small id="syncSub">מעדכן את קובץ הגיבוי הראשי</small></span>
-  </button>
-  <button class="action" id="snapshotBtn">
-    <span class="ico">⧉</span>
-    <span class="txt">שמירת גרסה מתוארכת<small>עותק נפרד שלא נדרס</small></span>
-  </button>
-  <button class="action" id="restoreBtn">
-    <span class="ico">↓</span>
-    <span class="txt">שחזור מדרייב<small>מוסיף רשומות שחסרות — לא מוחק כלום</small></span>
+    <span class="txt">גיבוי עכשיו<small id="backupSub">מעלה עותק מוצפן למאגר</small></span>
   </button>
   <div class="divider"></div>
   <button class="action" id="exportBtn">
@@ -295,7 +300,6 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 
 <div class="toast" id="toast"><div id="toastText"></div></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
