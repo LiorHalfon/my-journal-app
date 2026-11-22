@@ -67,3 +67,4 @@ python3 -m http.server 8080   # then http://localhost:8080
 - Text colours are held to WCAG AA. `--ink-faint` in the light palette is the known exception at 2.63 — see the git history for the dark-palette fix.
 - DOM access is by id through `view.byId()`; list and backup-setup interactions are delegated on `#list` and `#backupSetup` via `data-act` attributes.
 - The recovery code, key id, repo and token are shown and typed `dir="ltr"`.
+- The page may load only its own files and send requests only to `api.github.com`. The policy is a `<meta http-equiv="Content-Security-Policy">` at the top of `index.html`, because GitHub Pages can't set headers. A new host, inline script or inline event handler means editing that policy on purpose; styles keep `'unsafe-inline'` only for the `<style>` block.
