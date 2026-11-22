@@ -352,11 +352,14 @@ function setupActionHtml(act, icon, label, small) {
   );
 }
 
-/** שורה של מה שכבר הוגדר, עם כפתור להחלפה. textHtml כבר מוברח. */
-function setupLineHtml(textHtml, act, label) {
+/** שורה של מה שכבר הוגדר, עם הכפתורים להחלפה. textHtml כבר מוברח.
+    בצר הכפתורים יורדים מתחת לטקסט. */
+function setupLineHtml(textHtml, buttons) {
+  const buttonsHtml = buttons.map(([act, label]) => setupButtonHtml(act, label));
   return (
     `<div class="setup-line"><span class="ico">✓</span>` +
-    `<span class="txt">${textHtml}</span>${setupButtonHtml(act, label)}</div>`
+    `<span class="txt">${textHtml}</span>` +
+    `<span class="setup-buttons">${buttonsHtml.join("")}</span></div>`
   );
 }
 
@@ -397,12 +400,13 @@ function keySectionHtml({ kid, panel, code, error }) {
       `</div></div>`
     );
   }
+  /* גם עם מפתח אפשר להזין קוד: מי שיצר מפתח חדש בטעות במקום להזין את הקוד
+     צריך דרך להחזיר את המפתח שהגיבוי הוצפן בו. */
   if (kid) {
-    return setupLineHtml(
-      `מפתח פעיל · <span dir="ltr">${escapeHtml(kid)}</span>`,
-      "new-key",
-      "מפתח חדש"
-    );
+    return setupLineHtml(`מפתח פעיל · <span dir="ltr">${escapeHtml(kid)}</span>`, [
+      ["new-key", "מפתח חדש"],
+      ["enter-code", "יש לי קוד שחזור"],
+    ]);
   }
   return (
     setupActionHtml("new-key", "+", "יצירת מפתח", "קוד שחזור לשמירה במנהל הסיסמאות") +
@@ -413,11 +417,9 @@ function keySectionHtml({ kid, panel, code, error }) {
 /** בלי מאגר הטופס פתוח תמיד. עם מאגר, "שינוי" פותח אותו עם המאגר הנוכחי. */
 function accountSectionHtml({ repo, panel, error }) {
   if (repo && panel !== "account") {
-    return setupLineHtml(
-      `<span dir="ltr">${escapeHtml(repo)}</span>`,
-      "edit-account",
-      "שינוי"
-    );
+    return setupLineHtml(`<span dir="ltr">${escapeHtml(repo)}</span>`, [
+      ["edit-account", "שינוי"],
+    ]);
   }
   return (
     `<div class="folder-panel">` +
