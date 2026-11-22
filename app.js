@@ -32,6 +32,9 @@ let pendingCode = null;
 let setupError = null;
 /* הגיבוי האוטומטי האחרון מצא גיבוי במאגר ממכשיר שעוד לא העלה. */
 let backupBlocked = false;
+/* הגיבוי האוטומטי האחרון, או זה שאחרי פעולת הגדרה, נכשל. רק בזיכרון:
+   הגיבוי בעלייה מחשב אותו מחדש, כך שהגדרה שאף פעם לא מצליחה מזהירה בכל פתיחה. */
+let backupFailing = false;
 
 function render() {
   renderFolderBar();
@@ -60,7 +63,11 @@ function renderFolderBar({ focus = false } = {}) {
 }
 
 async function renderBackupStatus() {
-  view.renderBackupStatus({ ...(await backup.status()), blocked: backupBlocked });
+  view.renderBackupStatus({
+    ...(await backup.status()),
+    blocked: backupBlocked,
+    failing: backupFailing,
+  });
 }
 
 /** רק פעולות ההגדרה קוראות לזה, כדי שרענון של המצב לא ימחק שדה באמצע הקלדה. */
@@ -119,17 +126,41 @@ function scheduleBackup() {
   backupTimer = setTimeout(backupQuietly, BACKUP_DELAY_MS);
 }
 
+/** גיבוי שלא נכפה. מעדכן את החסימה ואת סימן הכישלון, מצייר את המצב,
+    ומחזיר את התוצאה של backupIfChanged או זורק את הכישלון. */
+async function trackedBackup() {
+  try {
+    const result = await backup.backupIfChanged();
+    backupFailing = false;
+    backupBlocked = result === "remote-exists";
+    return result;
+  } catch (error) {
+    backupFailing = true;
+    if (error?.kind === "offline" || error?.kind === "busy") requestBackgroundSync();
+    throw error;
+  } finally {
+    await renderBackupStatus().catch(() => {});
+  }
+}
+
 /** גיבוי אוטומטי. כישלון לא מדווח: הרשומות במכשיר, והטריגר הבא ינסה שוב.
     מחזיר את התוצאה של backupIfChanged, או null אם נכשל. */
 async function backupQuietly() {
   try {
-    const result = await backup.backupIfChanged();
-    backupBlocked = result === "remote-exists";
-    await renderBackupStatus();
-    return result;
-  } catch (error) {
-    if (error?.kind === "offline" || error?.kind === "busy") requestBackgroundSync();
+    return await trackedBackup();
+  } catch {
     return null;
+  }
+}
+
+/** הגיבוי שאחרי פעולת הגדרה שהבעלים לחץ עליה. כאן הכישלון כן מוצג: טוקן בלי הרשאת
+    כתיבה, למשל, עובר את בדיקת המאגר, ובלי ההודעה כל גיבוי שלו היה נכשל בשקט.
+    "remote-exists" אינו שגיאה: שורת המצב כבר אומרת לשחזר קודם. */
+async function backupAfterSetup() {
+  try {
+    await trackedBackup();
+  } catch (error) {
+    view.showNotice(backup.describeBackupError(error), true);
   }
 }
 
@@ -262,17 +293,20 @@ async function runSetup(panel, task) {
   setupPanel = null;
   pendingCode = null;
   setupError = null;
+  view.showNotice("");
   await Promise.all([renderBackupSetup(), renderBackupStatus()]);
-  backupQuietly();
+  backupAfterSetup();
 }
 
-/** בלי גישה ללוח הקוד עדיין מסומן כולו בלחיצה, להעתקה ידנית. */
+/** העתקה שנכשלה לא נשארת בשקט: אחרת הבעלים מדביק במנהל הסיסמאות את מה שהיה
+    בלוח קודם, ומאבד את העותק היחיד של הקוד. הקוד מסומן, כך שלחיצה ארוכה מעתיקה אותו. */
 async function copyCode() {
   try {
     await navigator.clipboard.writeText(pendingCode);
     view.showToast("הקוד הועתק. אחרי ששמרת אותו, מחק אותו מהיסטוריית הלוח.");
   } catch {
-    /* אין הודעה: הקוד עדיין על המסך. */
+    view.selectRecoveryCode();
+    view.showToast("ההעתקה לא הצליחה. הקוד מסומן — העתק אותו ידנית.");
   }
 }
 
@@ -295,7 +329,7 @@ function restoreFrom(commit) {
     await renderBackupStatus();
     view.showNotice(added ? `שוחזרו ${added} רשומות.` : "כל הרשומות בגרסה כבר קיימות.");
     if (added) view.showToast(`שוחזרו ${added} רשומות`);
-    backupQuietly();
+    backupAfterSetup();
   });
 }
 
@@ -584,6 +618,8 @@ function wireBackupSetup() {
         return copyCode();
 
       case "confirm-code":
+        /* לחיצה כפולה: הראשונה כבר שמרה את המפתח וניקתה את הקוד. */
+        if (!pendingCode) return;
         return runSetup("new-key", () => backup.saveKey(pendingCode));
 
       case "save-code":
@@ -599,11 +635,25 @@ function wireBackupSetup() {
 
 /* ================= עלייה ================= */
 
+/** גיבוי שקט בכל מעבר. ביציאה לרקע, כשהגיבוי מוגדר, גם תג Background Sync:
+    אם Android סוגר את האפליקציה באמצע העלאה, ה-service worker מסיים אותה.
+    כשלא השתנה כלום, הריצה שם מחזירה "unchanged" בלי בקשה. */
+function onVisibilityChange() {
+  backupQuietly();
+  if (document.visibilityState !== "hidden") return;
+  backup
+    .status()
+    .then(({ kid, repo }) => kid && repo && requestBackgroundSync())
+    .catch(() => {});
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   const register = () => {
     navigator.serviceWorker
-      .register("sw.js", { type: "module" })
+      /* updateViaCache "none": גם המודולים שה-worker מייבא נבדקים מול הרשת,
+         ולא נשארים גרסה אחת מאחורי הדף בגלל ה-max-age של GitHub Pages. */
+      .register("sw.js", { type: "module", updateViaCache: "none" })
       .catch((error) => console.warn("service worker registration failed", error));
   };
   /* boot() קורא לכאן אחרי awaits, אז "load" כבר יכול היה לעבור. */
@@ -633,7 +683,7 @@ async function boot() {
   /* גיבוי שקט בעלייה, כשהרשת חוזרת, ובכל מעבר לרקע ובחזרה ממנו. */
   backupQuietly();
   window.addEventListener("online", backupQuietly);
-  document.addEventListener("visibilitychange", backupQuietly);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   registerServiceWorker();
 }

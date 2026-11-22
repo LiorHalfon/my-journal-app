@@ -286,8 +286,8 @@ const STALE_AFTER_DAYS = 3;
 const REMOTE_EXISTS =
   "במאגר כבר יש גיבוי. שחזר ממנו קודם, ואז הגיבוי מהמכשיר הזה ימשיך ממנו.";
 
-/** אחת מחמש שורות המצב: הטקסט בגיליון, הכותרת של הנקודה, והצבע שלה. */
-function backupStatusOf({ kid, repo, confirmedAt, blocked }) {
+/** אחת משורות המצב: הטקסט בגיליון, הכותרת של הנקודה, והצבע שלה. */
+function backupStatusOf({ kid, repo, confirmedAt, blocked, failing }) {
   if (!kid || !repo) {
     return {
       dot: "",
@@ -296,7 +296,8 @@ function backupStatusOf({ kid, repo, confirmedAt, blocked }) {
     };
   }
   if (blocked) return { dot: "warn", title: REMOTE_EXISTS, text: REMOTE_EXISTS };
-  if (!confirmedAt) return { dot: "", title: "עוד לא גובה", text: "עוד לא גובה." };
+  /* הגדרה שהגיבוי האחרון שלה נכשל מזהירה, אחרת היא נראית כמו הגדרה שעוד לא הספיקה לגבות. */
+  if (!confirmedAt) return { dot: failing ? "warn" : "", title: "עוד לא גובה", text: "עוד לא גובה." };
 
   const days = Math.floor((Date.now() - confirmedAt) / ONE_DAY_MS);
   if (days >= STALE_AFTER_DAYS) {
@@ -375,10 +376,11 @@ function recoveryCodeHtml(code) {
 }
 
 function keySectionHtml({ kid, panel, code, error }) {
+  /* מפתח חדש וקוד שמוזן מחליפים שניהם את המפתח הקיים. */
+  const replacing = kid
+    ? `<p class="note">גיבויים קודמים יישארו נעולים במפתח הישן.</p>`
+    : "";
   if (panel === "new-key") {
-    const replacing = kid
-      ? `<p class="note">גיבויים קודמים יישארו נעולים במפתח הישן.</p>`
-      : "";
     return (
       `<div class="folder-panel">` +
       `<p class="panel-head">קוד השחזור שלך</p>` +
@@ -398,6 +400,7 @@ function keySectionHtml({ kid, panel, code, error }) {
     return (
       `<div class="folder-panel">` +
       fieldHtml("codebox", "קוד השחזור") +
+      replacing +
       setupErrorHtml(error) +
       `<div class="row">` +
       setupButtonHtml("save-code", "שמירה", "primary") +
@@ -440,7 +443,8 @@ function accountSectionHtml({ repo, panel, error }) {
 }
 
 /** מצייר מחדש רק את #backupSetup. פאנל אחד פתוח בכל רגע: בזמן שפאנל של המפתח
-    פתוח, המאגר מוסתר. מה שהוקלד בשדה שנשאר שורד את הבנייה מחדש. */
+    פתוח, המאגר מוסתר אבל נשאר בדף, כדי שמאגר וטוקן שהוקלדו לא יאבדו. טוקן חדש
+    מוצג ב-GitHub פעם אחת בלבד. מה שהוקלד בשדה שנשאר שורד את הבנייה מחדש. */
 export function renderBackupSetup({ kid, repo, panel, code, error }) {
   const box = byId("backupSetup");
   const typed = new Map(
@@ -451,11 +455,25 @@ export function renderBackupSetup({ kid, repo, panel, code, error }) {
   box.innerHTML =
     `<h3>מפתח הצפנה</h3>` +
     keySectionHtml({ kid, panel, code, error }) +
-    (keyPanelOpen ? "" : `<h3>מאגר GitHub</h3>` + accountSectionHtml({ repo, panel, error }));
+    `<div class="setup-account"${keyPanelOpen ? " hidden" : ""}>` +
+    `<h3>מאגר GitHub</h3>` +
+    accountSectionHtml({ repo, panel, error }) +
+    `</div>`;
 
   for (const input of box.querySelectorAll("input")) {
     if (typed.has(input.dataset.role)) input.value = typed.get(input.dataset.role);
   }
+}
+
+/** מסמן את קוד השחזור שעל המסך, כדי שלחיצה ארוכה תעתיק אותו בצעד אחד. */
+export function selectRecoveryCode() {
+  const code = byId("backupSetup").querySelector(".code");
+  if (!code) return;
+  const range = document.createRange();
+  range.selectNodeContents(code);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 /* ================= הודעות ================= */
