@@ -6,16 +6,11 @@ import * as store from "./entries-store.js";
 import * as backup from "./backup.js";
 import * as view from "./view.js";
 import * as folders from "./folders.js";
-import {
-  serializeEntries,
-  readEntries,
-  timestampedFilename,
-} from "./backup-file.js";
+import { timestampedFilename } from "./backup-file.js";
 import { readLocal, writeLocal } from "./local-storage.js";
 
 const DRAFT_KEY = "journal.draft.v1";
 const BACKUP_DELAY_MS = 20000;
-const BAD_BACKUP_MESSAGE = "הקובץ לא נקרא כקובץ גיבוי תקין.";
 
 /* ================= מצב המסך ================= */
 
@@ -271,34 +266,55 @@ async function copyCode() {
   }
 }
 
-function exportToFile() {
-  const blob = new Blob([serializeEntries(entries)], {
-    type: "application/json",
+/** מציג את הגרסאות במאגר, מהחדשה לישנה. */
+function showVersions() {
+  view.showNotice("");
+  return runExclusive("restoreSub", "טוען גרסאות", async () => {
+    view.renderVersionList(await backup.listVersions());
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = timestampedFilename();
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function importFromFile(file) {
-  try {
-    const added = await store.addMissing(readEntries(await file.text()));
+/** מוסיף מגרסה אחת רשומות שחסרות, ומסיר את חסימת "במאגר כבר יש גיבוי". */
+function restoreFrom(commit) {
+  view.showNotice("");
+  return runExclusive("restoreSub", "משחזר", async () => {
+    const added = await backup.restoreVersion(commit);
+    view.showBackupMessage("");
     await refreshEntries();
-    view.showNotice(
-      added ? `יובאו ${added} רשומות.` : "כל הרשומות בקובץ כבר קיימות."
-    );
+    backupBlocked = false;
+    await renderBackupStatus();
+    view.showNotice(added ? `שוחזרו ${added} רשומות.` : "כל הרשומות בגרסה כבר קיימות.");
+    if (added) view.showToast(`שוחזרו ${added} רשומות`);
+    backupQuietly();
+  });
+}
+
+function exportToFile() {
+  view.showNotice("");
+  return runExclusive("exportSub", "מצפין", async () => {
+    const blob = new Blob([await backup.exportFile()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = timestampedFilename();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}
+
+function importFromFile(file) {
+  view.showNotice("");
+  return runExclusive("importSub", "מייבא", async () => {
+    const added = await backup.importFile(await file.text());
+    await refreshEntries();
+    view.showNotice(added ? `יובאו ${added} רשומות.` : "כל הרשומות בקובץ כבר קיימות.");
     if (added) {
       view.showToast(`יובאו ${added} רשומות`);
       scheduleBackup();
     }
-  } catch {
-    view.showNotice(BAD_BACKUP_MESSAGE, true);
-  }
+  });
 }
 
 /* ================= חיווט ================= */
@@ -515,6 +531,11 @@ function wireBackupSheet() {
   });
 
   view.byId("backupBtn").addEventListener("click", backupNow);
+  view.byId("restoreBtn").addEventListener("click", showVersions);
+  view.byId("backupList").addEventListener("click", (event) => {
+    const item = event.target.closest("[data-commit]");
+    if (item) restoreFrom(item.dataset.commit);
+  });
   view.byId("exportBtn").addEventListener("click", exportToFile);
 
   const fileInput = view.byId("importFile");

@@ -284,14 +284,18 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
     <span class="ico">↑</span>
     <span class="txt">גיבוי עכשיו<small id="backupSub">מעלה עותק מוצפן למאגר</small></span>
   </button>
+  <button class="action" id="restoreBtn" disabled>
+    <span class="ico">↓</span>
+    <span class="txt">שחזור<small id="restoreSub">מוסיף רשומות שחסרות — לא מוחק כלום</small></span>
+  </button>
   <div class="divider"></div>
-  <button class="action" id="exportBtn">
+  <button class="action" id="exportBtn" disabled>
     <span class="ico">⤓</span>
-    <span class="txt">הורדת קובץ JSON<small>עותק מקומי למכשיר</small></span>
+    <span class="txt">ייצוא לקובץ מוצפן<small id="exportSub">נפתח רק עם קוד השחזור</small></span>
   </button>
   <button class="action" id="importBtn">
     <span class="ico">⤒</span>
-    <span class="txt">ייבוא מקובץ JSON<small>מיזוג לפי מזהה רשומה</small></span>
+    <span class="txt">ייבוא מקובץ<small id="importSub">קובץ מוצפן, או קובץ JSON ישן. מיזוג לפי מזהה רשומה</small></span>
   </button>
   <input type="file" id="importFile" accept="application/json,.json" hidden>
 

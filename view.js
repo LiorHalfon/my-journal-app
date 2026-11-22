@@ -319,6 +319,11 @@ export function renderBackupStatus(state) {
   sub.classList.toggle("warn", dot === "warn");
 
   byId("backupBtn").disabled = !(state.kid && state.repo);
+  byId("restoreBtn").disabled = !(state.kid && state.repo);
+  byId("exportBtn").disabled = !state.kid;
+  byId("exportSub").textContent = state.kid
+    ? "נפתח רק עם קוד השחזור"
+    : "צריך קודם מפתח הצפנה";
 }
 
 /* ================= הגדרת הגיבוי ================= */
@@ -491,22 +496,20 @@ export function showBackupMessage(message, { busy = false } = {}) {
     : "";
 }
 
-export function renderBackupList(files) {
-  const items = files.map((file) => {
-    const when = file.createdTime
-      ? shortStampOf.format(new Date(file.createdTime))
-      : "";
-    return (
-      `<button class="backup-item" data-file="${escapeHtml(file.id)}">` +
+/** הגרסאות במאגר, מהחדשה לישנה. כל כפתור נושא את ה-commit שלו. */
+export function renderVersionList(versions) {
+  const items = versions.map(
+    ({ commit, at }) =>
+      `<button class="backup-item" data-commit="${escapeHtml(commit)}">` +
       `<span class="backup-ico">↓</span>` +
-      `<span>${escapeHtml(file.name)}<time>${escapeHtml(when)}</time></span></button>`
-    );
-  });
+      `<span><time>${escapeHtml(shortStampOf.format(new Date(at)))}</time></span></button>`
+  );
 
   byId("backupList").innerHTML =
     `<div class="divider"></div>` +
-    `<p class="sub">בחר קובץ לשחזור. רשומות שכבר קיימות לא ישוכפלו.</p>` +
-    items.join("");
+    (versions.length
+      ? `<p class="sub">בחר גרסה לשחזור. רשומות שכבר קיימות לא ישוכפלו.</p>` + items.join("")
+      : `<p class="sub">אין עדיין גרסאות במאגר.</p>`);
 }
 
 /* ================= הכתיבה ================= */
