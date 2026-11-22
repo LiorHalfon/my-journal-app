@@ -5,6 +5,14 @@
 const API = "https://api.github.com";
 const API_VERSION = "2022-11-28";
 
+/* קובץ של 1 עד 100 MB נענה רק בסוגי המדיה raw ו-object. ברירת המחדל עונה עליו 403. */
+const JSON_TYPE = "application/vnd.github+json";
+const OBJECT_TYPE = "application/vnd.github.object+json";
+const RAW_TYPE = "application/vnd.github.raw+json";
+
+/* בקשה שנתקעה מחזיקה את ה-Web Lock, ואיתו כל גיבוי, שחזור ושמירת מאגר. אחרי דקה מוותרים. */
+const TIMEOUT_MS = 60000;
+
 export const FILE_PATH = "journal.sealed.json";
 
 const COMMIT_MESSAGE = "backup";
@@ -60,43 +68,54 @@ function kindForStatus(status, method, headers) {
   return "http";
 }
 
-/** בקשה אחת. מחזירה את ה-Response התקין, או זורקת GithubError. */
-async function request(account, method, path, { body, raw = false } = {}) {
+/** חריגה מהזמן נחשבת כמו GitHub עמוס: יש רשת, וניסיון מאוחר יותר יכול להצליח. */
+const timedOut = (error) => error?.name === "TimeoutError" || error?.name === "AbortError";
+
+/** בקשה אחת. מחזירה את גוף התשובה, JSON או טקסט, או זורקת GithubError.
+    הזמן הקצוב חל גם על קריאת הגוף, כך שגם הורדה שנתקעה באמצע משחררת את הנעילה. */
+async function request(account, method, path, { body, accept = JSON_TYPE, text = false } = {}) {
   assertOnline();
   let response;
   try {
     response = await fetch(`${API}${path}`, {
       method,
       cache: "no-store", // GitHub מחזיר Cache-Control של דקה, וגרסה ישנה תשבש ניסיון חוזר
+      signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${account.token}`,
-        Accept: raw ? "application/vnd.github.raw+json" : "application/vnd.github+json",
+        Accept: accept,
         "X-GitHub-Api-Version": API_VERSION,
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       body,
     });
-  } catch {
-    throw new GithubError("offline");
+  } catch (error) {
+    throw new GithubError(timedOut(error) ? "busy" : "offline");
   }
   if (!response.ok) {
     throw new GithubError(kindForStatus(response.status, method, response.headers), response.status);
   }
-  return response;
+  try {
+    return await (text ? response.text() : response.json());
+  } catch (error) {
+    if (timedOut(error)) throw new GithubError("busy");
+    throw error;
+  }
 }
 
 const contentsPath = (account) => `/repos/${account.repo}/contents/${FILE_PATH}`;
 
 /** המאגר קיים, הטוקן תקף, והמאגר פרטי. */
 export async function checkAccount(account) {
-  const repo = await (await request(account, "GET", `/repos/${account.repo}`)).json();
+  const repo = await request(account, "GET", `/repos/${account.repo}`);
   if (repo.private !== true) throw new GithubError("public");
 }
 
-/** ה-sha של הקובץ במאגר, או null אם עוד אין קובץ. */
+/** ה-sha של הקובץ במאגר, או null אם עוד אין קובץ.
+    סוג המדיה object: הוא מחזיר sha גם לקובץ מעל 1 MB, שעליו ברירת המחדל עונה 403. */
 export async function currentSha(account) {
   try {
-    return (await (await request(account, "GET", contentsPath(account))).json()).sha;
+    return (await request(account, "GET", contentsPath(account), { accept: OBJECT_TYPE })).sha;
   } catch (error) {
     if (error.kind === "missing") return null;
     throw error;
@@ -110,20 +129,25 @@ export async function upload(account, text, sha) {
     content: btoa(text), // המעטפה היא ASCII
     ...(sha ? { sha } : {}),
   });
-  const response = await request(account, "PUT", contentsPath(account), { body });
-  return (await response.json()).content.sha;
+  return (await request(account, "PUT", contentsPath(account), { body })).content.sha;
 }
 
 /** הגרסאות מהחדשה לישנה, עד 30. */
 export async function listVersions(account) {
   const path = `/repos/${account.repo}/commits?path=${FILE_PATH}&per_page=${VERSIONS_LIMIT}`;
-  const commits = await (await request(account, "GET", path)).json();
+  let commits;
+  try {
+    commits = await request(account, "GET", path);
+  } catch (error) {
+    /* מאגר ריק לגמרי, בלי אף commit: GitHub עונה 409 "Git Repository is empty". */
+    if (error.status === 409) return [];
+    throw error;
+  }
   return commits.map((item) => ({ commit: item.sha, at: item.commit.committer.date }));
 }
 
 /** הטקסט של הקובץ, בגרסה האחרונה או בגרסה של commit מסוים. */
 export async function download(account, commit) {
   const ref = commit ? `?ref=${encodeURIComponent(commit)}` : "";
-  const response = await request(account, "GET", contentsPath(account) + ref, { raw: true });
-  return response.text();
+  return request(account, "GET", contentsPath(account) + ref, { accept: RAW_TYPE, text: true });
 }

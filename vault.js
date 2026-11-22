@@ -61,11 +61,13 @@ export async function toRecoveryCode(bytes) {
   return flat.match(/.{4}/g).join("-");
 }
 
-/** מחזיר את 32 הבתים, או null אם הקוד לא תקין. סלחני להקלדה ביד. */
+/** מחזיר את 32 הבתים, או null אם הקוד לא תקין. סלחני להקלדה ביד.
+    הדבקה ממנהל סיסמאות או ממסך RTL מביאה איתה סימני כיוון ותווים ברוחב אפס (\p{Cf}),
+    מקפים אחרים (\p{Pd}) ורווח קשיח. כולם נמחקים כמו רווח ומקף; סכום הביקורת שומר על השאר. */
 export async function fromRecoveryCode(code) {
   const flat = String(code)
+    .replace(/[\s\p{Pd}\p{Cf}]/gu, "")
     .toUpperCase()
-    .replace(/[\s-]/g, "")
     .replaceAll("O", "0")
     .replace(/[IL]/g, "1");
   if (flat.length !== DATA_CHARS + CHECK_CHARS) return null;
