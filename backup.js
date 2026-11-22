@@ -141,15 +141,34 @@ export async function listVersions() {
     כולו בתוך הנעילה: מאגר אחר שנשמר באמצע לא יקבל את הסרת החסימה של המאגר הזה. */
 export function restoreVersion(commit) {
   return withLock(async () => {
-    const text = await github.download(await savedAccount(), commit);
-    const added = await store.addMissing(await readBackupText(text, { plainAllowed: false }));
-    /* השחזור מסיר את החסימה של מכשיר שעוד לא העלה. הטביעה הריקה לא תואמת שום יומן,
-       ולכן הריצה הבאה מעלה את היומן הממוזג מעל הגרסה הנוכחית. */
-    if (!(await settings.get("remote"))) {
-      await settings.set("remote", { sha: null, fingerprint: "", confirmedAt: null });
-    }
+    const account = await savedAccount();
+    const text = await github.download(account, commit);
+    const chosen = await readBackupText(text, { plainAllowed: false });
+    if (await settings.get("remote")) return store.addMissing(chosen);
+
+    /* מכשיר שעוד לא העלה: השחזור מסיר את החסימה, וההעלאה הבאה תכסה את הגרסה האחרונה
+       במאגר. לכן גם הרשומות שלה נכנסות קודם. כשהיא לא נפתחת במפתח הזה, החסימה נשארת. */
+    const latest = await latestEntries(account, commit);
+    let added = await store.addMissing(chosen);
+    if (!latest) return added;
+    added += await store.addMissing(latest);
+    /* הטביעה הריקה לא תואמת שום יומן, ולכן הריצה הבאה מעלה את היומן הממוזג. */
+    await settings.set("remote", { sha: null, fingerprint: "", confirmedAt: null });
     return added;
   });
+}
+
+/** הרשומות של הגרסה האחרונה במאגר. [] כשהיא הגרסה שכבר הורדה, null כשהיא לא נפתחת כאן. */
+async function latestEntries(account, chosenCommit) {
+  if (!chosenCommit) return []; // בלי commit, מה שהורד הוא כבר הגרסה האחרונה
+  const [latest] = await github.listVersions(account);
+  if (!latest || latest.commit === chosenCommit) return [];
+  try {
+    return await readBackupText(await github.download(account), { plainAllowed: false });
+  } catch (error) {
+    if (error instanceof vault.VaultError) return null;
+    throw error;
+  }
 }
 
 /** היומן כקובץ חתום, שנפתח רק עם קוד השחזור. */
