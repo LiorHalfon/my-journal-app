@@ -61,7 +61,7 @@ python3 -m http.server 8080   # then http://localhost:8080
 
 - UI strings are Hebrew and hardcoded inline; there is no i18n layer. Layout is RTL, so use logical CSS properties (`margin-inline-start`, `inset-inline`).
 - All CSS lives in the `<style>` block of `index.html`. Each colour token is declared once with `light-dark()`, so a palette change is a one-line edit; `[data-theme]` overrides `color-scheme` to force a mode.
-- The writing surface (`.composer textarea`, `.entry-text`, `.entry-edit textarea`) is Heebo; everything else is Assistant. That split is what makes an entry read as content rather than as interface.
+- The writing surface (`.composer textarea`, `.entry-text`, `.entry-edit textarea`) is Heebo; everything else is Assistant. That split is what makes an entry read as content rather than as interface. Both fonts are served from `fonts/` (Hebrew and Latin subsets, precached), never from Google.
 - Text colours are held to WCAG AA. `--ink-faint` in the light palette is the known exception at 2.63 — see the git history for the dark-palette fix.
 - DOM access is by id through `view.byId()`; list and backup-setup interactions are delegated on `#list` and `#backupSetup` via `data-act` attributes.
 - The recovery code, key id, repo and token are shown and typed `dir="ltr"`.

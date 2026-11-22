@@ -19,6 +19,7 @@ local-storage.js      אחסון מקומי שלא זורק
 sw.js                 service worker — הדף עובד אופליין
 manifest.webmanifest  התקנה כאפליקציה
 icons/
+fonts/                Assistant ו-Heebo (עברית ולטינית) ורישיונות OFL
 ```
 
 מודולים נייטיב של הדפדפן (`type="module"`), בלי בילד ובלי תלויות.
