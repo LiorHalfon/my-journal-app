@@ -115,20 +115,19 @@ export function backupIfChanged({ force = false } = {}) {
     }
 
     const sealed = await vault.seal(keyRecord.key, keyRecord.kid, serializeEntries(entries));
-    const sha = await uploadOver(account, sealed, remote?.sha ?? null);
+    let sha;
+    try {
+      sha = await github.upload(account, sealed, remote?.sha ?? null);
+    } catch (error) {
+      if (error?.kind !== "conflict" && error?.kind !== "missing") throw error;
+      /* הבדיקה למעלה לא מצאה קובץ, ועכשיו יש: גיבוי הופיע בינתיים, ולא דורסים אותו. */
+      if (error.kind === "conflict" && !remote && !force) return "remote-exists";
+      /* sha שהתיישן מקבל ניסיון חוזר אחד, על ה-sha הנוכחי במאגר. */
+      sha = await github.upload(account, sealed, await github.currentSha(account));
+    }
     await settings.set("remote", { sha, fingerprint: print, confirmedAt: Date.now() });
     return "uploaded";
   });
-}
-
-/** sha שהתיישן מקבל ניסיון חוזר אחד, על ה-sha הנוכחי במאגר. */
-async function uploadOver(account, sealed, sha) {
-  try {
-    return await github.upload(account, sealed, sha);
-  } catch (error) {
-    if (error?.kind !== "conflict" && error?.kind !== "missing") throw error;
-    return github.upload(account, sealed, await github.currentSha(account));
-  }
 }
 
 /* ================= שחזור, ייצוא וייבוא ================= */
@@ -138,16 +137,19 @@ export async function listVersions() {
   return github.listVersions(await savedAccount());
 }
 
-/** מוסיף מהגרסה רשומות שחסרות כאן, ומחזיר כמה נוספו. לא מוחק ולא דורס. */
-export async function restoreVersion(commit) {
-  const text = await github.download(await savedAccount(), commit);
-  const added = await store.addMissing(await readBackupText(text, { plainAllowed: false }));
-  /* השחזור מסיר את החסימה של מכשיר שעוד לא העלה. הטביעה הריקה לא תואמת שום יומן,
-     ולכן הריצה הבאה מעלה את היומן הממוזג מעל הגרסה הנוכחית. */
-  if (!(await settings.get("remote"))) {
-    await settings.set("remote", { sha: null, fingerprint: "", confirmedAt: null });
-  }
-  return added;
+/** מוסיף מהגרסה רשומות שחסרות כאן, ומחזיר כמה נוספו. לא מוחק ולא דורס.
+    כולו בתוך הנעילה: מאגר אחר שנשמר באמצע לא יקבל את הסרת החסימה של המאגר הזה. */
+export function restoreVersion(commit) {
+  return withLock(async () => {
+    const text = await github.download(await savedAccount(), commit);
+    const added = await store.addMissing(await readBackupText(text, { plainAllowed: false }));
+    /* השחזור מסיר את החסימה של מכשיר שעוד לא העלה. הטביעה הריקה לא תואמת שום יומן,
+       ולכן הריצה הבאה מעלה את היומן הממוזג מעל הגרסה הנוכחית. */
+    if (!(await settings.get("remote"))) {
+      await settings.set("remote", { sha: null, fingerprint: "", confirmedAt: null });
+    }
+    return added;
+  });
 }
 
 /** היומן כקובץ חתום, שנפתח רק עם קוד השחזור. */
