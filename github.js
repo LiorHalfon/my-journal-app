@@ -67,6 +67,7 @@ async function request(account, method, path, { body, raw = false } = {}) {
   try {
     response = await fetch(`${API}${path}`, {
       method,
+      cache: "no-store", // GitHub מחזיר Cache-Control של דקה, וגרסה ישנה תשבש ניסיון חוזר
       headers: {
         Authorization: `Bearer ${account.token}`,
         Accept: raw ? "application/vnd.github.raw+json" : "application/vnd.github+json",
