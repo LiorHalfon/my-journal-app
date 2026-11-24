@@ -16,7 +16,11 @@ const TIMEOUT_MS = 60000;
 export const FILE_PATH = "journal.sealed.json";
 
 const COMMIT_MESSAGE = "backup";
+
+/* כל גרסה במאגר היא עותק מלא, כי git לא דוחס הצפנה. מעל 60 commits הקיצוץ משאיר
+   את 30 האחרונים, אותו מספר שהשחזור מציג. */
 const VERSIONS_LIMIT = 30;
+export const PRUNE_ABOVE = 60;
 
 /** כשל מול GitHub. ה-kind הוא מה שקובע את ההודעה למשתמש. */
 export class GithubError extends Error {
@@ -36,6 +40,7 @@ const MESSAGES = {
   denied: "לטוקן אין הרשאת כתיבה למאגר הזה.",
   missing: "המאגר לא נמצא, או שלטוקן אין גישה אליו.",
   busy: "GitHub לא זמין כרגע. הרשומות שמורות במכשיר — נסה שוב בעוד רגע.",
+  rejected: "GitHub סירב לקצר את היסטוריית הגיבוי. הגיבוי עצמו נשמר.",
 };
 
 /** ההודעה בעברית. conflict נבלע בגיבוי עצמו ולכן מקבל את הטקסט הכללי. */
@@ -150,4 +155,59 @@ export async function listVersions(account) {
 export async function download(account, commit) {
   const ref = commit ? `?ref=${encodeURIComponent(commit)}` : "";
   return request(account, "GET", contentsPath(account) + ref, { accept: RAW_TYPE, text: true });
+}
+
+/* ================= קיצוץ ההיסטוריה ================= */
+
+/* הענף זז רק דרך updateRefs עם beforeOid: GitHub בודק ומזיז בפעולה אחת.
+   ל-PATCH של REST עם force אין בדיקה כזאת, והוא היה מוחק העלאה שנחתה בינתיים. */
+const MOVE_BRANCH = "mutation($input: UpdateRefsInput!) { updateRefs(input: $input) { clientMutationId } }";
+const GRAPHQL_KINDS = { FORBIDDEN: "denied", NOT_FOUND: "missing" };
+
+/** בקשת GraphQL. תשובה עם errors היא כשל, גם כשהסטטוס 200. */
+async function graphql(account, query, variables) {
+  const answer = await request(account, "POST", "/graphql", { body: JSON.stringify({ query, variables }) });
+  const [error] = answer.errors ?? [];
+  if (error) throw new GithubError(GRAPHQL_KINDS[error.type] ?? "rejected");
+  return answer.data;
+}
+
+/** כשיש בענף יותר מ-60 commits, בונה מחדש את 30 האחרונים כשרשרת חדשה ומזיז אליה את הענף.
+    העצים, ההודעות, הכותבים והתאריכים נשארים, ולכן גם ה-sha של הקובץ שכל מכשיר שומר.
+    הענף זז רק אם הוא עדיין על ה-commit שממנו התחלנו, כך שהעלאה ממכשיר אחר שנחתה
+    בינתיים נשארת והקיצוץ נכשל. עד הצעד האחרון שום דבר בענף לא משתנה.
+    מחזיר "short" (אין מה לקצר), "skipped" (היסטוריה לא בקו ישר) או "pruned". */
+export async function pruneHistory(account) {
+  const beyond = await request(account, "GET", `/repos/${account.repo}/commits?per_page=1&page=${PRUNE_ABOVE + 1}`);
+  if (!beyond.length) return "short";
+
+  const repo = await request(account, "GET", `/repos/${account.repo}`);
+  const branch = repo.default_branch;
+  const listPath = `/repos/${account.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${VERSIONS_LIMIT + 1}`;
+  const list = await request(account, "GET", listPath);
+  /* כל commit שנשאר הוא בן יחיד של הבא ברשימה. commit מיזוג, או היסטוריה שהתקצרה בינתיים, לא נוגעים. */
+  const keep = list.slice(0, VERSIONS_LIMIT);
+  const linear =
+    list.length > VERSIONS_LIMIT &&
+    keep.every((item, i) => item.parents.length === 1 && item.parents[0].sha === list[i + 1].sha);
+  if (!linear) return "skipped";
+
+  /* מהישן לחדש: כל commit חדש מצביע על הקודם, ולכן אחד אחרי השני. הישן ביותר הופך לשורש. */
+  let parent = null;
+  for (const item of [...keep].reverse()) {
+    const { tree, message, author, committer } = item.commit;
+    const made = await request(account, "POST", `/repos/${account.repo}/git/commits`, {
+      body: JSON.stringify({ message, tree: tree.sha, parents: parent ? [parent] : [], author, committer }),
+    });
+    if (made.tree?.sha !== tree.sha) throw new GithubError("rejected");
+    parent = made.sha;
+  }
+
+  await graphql(account, MOVE_BRANCH, {
+    input: {
+      repositoryId: repo.node_id,
+      refUpdates: [{ name: `refs/heads/${branch}`, beforeOid: list[0].sha, afterOid: parent, force: true }],
+    },
+  });
+  return "pruned";
 }
