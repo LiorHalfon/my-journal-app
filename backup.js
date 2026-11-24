@@ -126,8 +126,19 @@ export function backupIfChanged({ force = false } = {}) {
       sha = await github.upload(account, sealed, await github.currentSha(account));
     }
     await settings.set("remote", { sha, fingerprint: print, confirmedAt: Date.now() });
+    await pruneQuietly(account);
     return "uploaded";
   });
+}
+
+/** מקצר את ההיסטוריה של המאגר אחרי העלאה. הגיבוי כבר הצליח, ולכן כשל כאן נבלע
+    תמיד, גם ב"גיבוי עכשיו": ההיסטוריה נשארת כמו שהייתה, וההעלאה הבאה תנסה שוב. */
+async function pruneQuietly(account) {
+  try {
+    await github.pruneHistory(account);
+  } catch {
+    /* ההעלאה הבאה תנסה שוב */
+  }
 }
 
 /* ================= שחזור, ייצוא וייבוא ================= */
