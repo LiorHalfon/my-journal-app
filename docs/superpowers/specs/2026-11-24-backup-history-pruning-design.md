@@ -44,6 +44,9 @@ Building the chain locally and pushing it once isn't possible from the page. `gi
 - Another device uploads before step 5: the branch no longer points at `H`, `updateRefs` refuses, and the upload survives. The next upload from either device prunes.
 - Another device uploads after step 5: the new tip has `H`'s tree, so the file's blob sha hasn't changed, and its PUT with its stored sha lands on top of the new tip. If GitHub had already read the old head for that PUT, it answers 409, and the existing stale-sha retry uploads onto the new tip.
 - The same device: the page and the service worker share the Web Lock.
+- Comparing commit shas is enough. Every upload and every prune makes new commits, so a sha never comes back, and "the branch still points at `H`" can only mean nothing landed since step 3. This is why the design moves the branch with `updateRefs` and not REST `PATCH /git/refs`, whose `force` has no such check.
+- A device marks its journal as backed up only after GitHub accepts its PUT, so an entry is never marked backed up unless it is in a commit on the branch.
+- Pruning doesn't make two writing devices safe. The head is still whichever device uploaded last. A version another device covered used to stay in the history forever; now it stays only while it is among the newest 30.
 
 **Cost.** One small request per upload. About every 30th upload, 33 more requests of roughly 300 bytes each, holding the lock for 5 to 15 s. A manual "גיבוי עכשיו" that happens to prune waits that long.
 
