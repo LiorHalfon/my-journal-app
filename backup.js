@@ -131,13 +131,19 @@ export function backupIfChanged({ force = false } = {}) {
   });
 }
 
+/* קיצוץ שנכשל מחכה יום. כל ניסיון עולה כ-34 בקשות ומשאיר 30 commits יתומים, וסירוב
+   קבוע של GitHub היה מוסיף את זה לכל העלאה. */
+const PRUNE_RETRY_MS = 24 * 60 * 60 * 1000;
+
 /** מקצר את ההיסטוריה של המאגר אחרי העלאה. הגיבוי כבר הצליח, ולכן כשל כאן נבלע
-    תמיד, גם ב"גיבוי עכשיו": ההיסטוריה נשארת כמו שהייתה, וההעלאה הבאה תנסה שוב. */
+    תמיד, גם ב"גיבוי עכשיו": ההיסטוריה נשארת כמו שהייתה, והניסיון הבא בעוד יום. */
 async function pruneQuietly(account) {
   try {
+    const waiting = await settings.get("prune");
+    if (waiting && Date.now() < waiting.retryAt) return;
     await github.pruneHistory(account);
   } catch {
-    /* ההעלאה הבאה תנסה שוב */
+    await settings.set("prune", { retryAt: Date.now() + PRUNE_RETRY_MS }).catch(() => {});
   }
 }
 
