@@ -126,8 +126,25 @@ export function backupIfChanged({ force = false } = {}) {
       sha = await github.upload(account, sealed, await github.currentSha(account));
     }
     await settings.set("remote", { sha, fingerprint: print, confirmedAt: Date.now() });
+    await pruneQuietly(account);
     return "uploaded";
   });
+}
+
+/* קיצוץ שנכשל מחכה יום. כל ניסיון עולה כ-34 בקשות ומשאיר 30 commits יתומים, וסירוב
+   קבוע של GitHub היה מוסיף את זה לכל העלאה. */
+const PRUNE_RETRY_MS = 24 * 60 * 60 * 1000;
+
+/** מקצר את ההיסטוריה של המאגר אחרי העלאה. הגיבוי כבר הצליח, ולכן כשל כאן נבלע
+    תמיד, גם ב"גיבוי עכשיו": ההיסטוריה נשארת כמו שהייתה, והניסיון הבא בעוד יום. */
+async function pruneQuietly(account) {
+  try {
+    const waiting = await settings.get("prune");
+    if (waiting && Date.now() < waiting.retryAt) return;
+    await github.pruneHistory(account);
+  } catch {
+    await settings.set("prune", { retryAt: Date.now() + PRUNE_RETRY_MS }).catch(() => {});
+  }
 }
 
 /* ================= שחזור, ייצוא וייבוא ================= */
