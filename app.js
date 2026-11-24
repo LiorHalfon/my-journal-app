@@ -1,21 +1,16 @@
 /* יומן — חיווט.
    מחזיק את מצב המסך, מחבר אירועים למודולים, ומעלה הכל.
-   הלוגיקה עצמה יושבת ב-entries-store, drive, backup-file ו-view. */
+   הלוגיקה עצמה יושבת ב-entries-store, backup, backup-file ו-view. */
 
 import * as store from "./entries-store.js";
-import * as drive from "./drive.js";
+import * as backup from "./backup.js";
 import * as view from "./view.js";
 import * as folders from "./folders.js";
-import {
-  serializeEntries,
-  readEntries,
-  timestampedFilename,
-} from "./backup-file.js";
+import { timestampedFilename } from "./backup-file.js";
 import { readLocal, writeLocal } from "./local-storage.js";
 
 const DRAFT_KEY = "journal.draft.v1";
-const AUTO_SYNC_DELAY_MS = 20000;
-const BAD_BACKUP_MESSAGE = "הקובץ לא נקרא כקובץ גיבוי תקין.";
+const BACKUP_DELAY_MS = 20000;
 
 /* ================= מצב המסך ================= */
 
@@ -29,7 +24,17 @@ let query = "";
 let editingId = null;
 let pendingDeleteId = null;
 let busy = false;
-let autoSyncTimer = null;
+let backupTimer = null;
+/* הגדרת הגיבוי: איזה פאנל פתוח (null, "new-key", "enter-code" או "account"),
+   קוד השחזור שמוצג ועוד לא נשמר, וההודעה של הכישלון האחרון בפאנל. הקוד רק בזיכרון. */
+let setupPanel = null;
+let pendingCode = null;
+let setupError = null;
+/* הגיבוי האוטומטי האחרון מצא גיבוי במאגר ממכשיר שעוד לא העלה. */
+let backupBlocked = false;
+/* הגיבוי האוטומטי האחרון, או זה שאחרי פעולת הגדרה, נכשל. רק בזיכרון:
+   הגיבוי בעלייה מחשב אותו מחדש, כך שהגדרה שאף פעם לא מצליחה מזהירה בכל פתיחה. */
+let backupFailing = false;
 
 function render() {
   renderFolderBar();
@@ -57,10 +62,23 @@ function renderFolderBar({ focus = false } = {}) {
   revealOpenFolder = false;
 }
 
-function renderSyncStatus() {
-  view.renderSyncStatus({
-    connected: drive.isConnected(),
-    lastSyncAt: drive.lastSyncAt(),
+async function renderBackupStatus() {
+  view.renderBackupStatus({
+    ...(await backup.status()),
+    blocked: backupBlocked,
+    failing: backupFailing,
+  });
+}
+
+/** רק פעולות ההגדרה קוראות לזה, כדי שרענון של המצב לא ימחק שדה באמצע הקלדה. */
+async function renderBackupSetup() {
+  const { kid, repo } = await backup.status();
+  view.renderBackupSetup({
+    kid,
+    repo,
+    panel: setupPanel,
+    code: pendingCode,
+    error: setupError,
   });
 }
 
@@ -83,7 +101,7 @@ async function addEntry(text) {
   };
   await store.put(folders.withFolder(entry, folder));
   await refreshEntries();
-  scheduleAutoSync();
+  scheduleBackup();
 }
 
 /** הטקסט והתיקייה נשמרים יחד. "" מוציא את הרשומה מכל תיקייה. */
@@ -93,22 +111,66 @@ async function updateEntry(id, text, folderName) {
   const edited = { ...existing, text, updatedAtMs: Date.now() };
   await store.put(folders.withFolder(edited, folderName));
   await refreshEntries();
-  scheduleAutoSync();
+  scheduleBackup();
 }
 
 async function deleteEntry(id) {
   await store.remove(id);
   await refreshEntries();
-  scheduleAutoSync();
+  scheduleBackup();
 }
 
-/** סנכרון שקט אחרי שינוי. כישלון לא מדווח — הרשומות במכשיר, ויש כפתור ידני. */
-function scheduleAutoSync() {
-  if (!drive.isConnected()) return;
-  clearTimeout(autoSyncTimer);
-  autoSyncTimer = setTimeout(() => {
-    drive.syncLatestIfConnected(serializeEntries(entries));
-  }, AUTO_SYNC_DELAY_MS);
+/** גיבוי שקט 20 שניות אחרי שינוי. שינוי נוסף בזמן הזה דוחה אותו. */
+function scheduleBackup() {
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(backupQuietly, BACKUP_DELAY_MS);
+}
+
+/** גיבוי שלא נכפה. מעדכן את החסימה ואת סימן הכישלון, מצייר את המצב,
+    ומחזיר את התוצאה של backupIfChanged או זורק את הכישלון. */
+async function trackedBackup() {
+  try {
+    const result = await backup.backupIfChanged();
+    backupFailing = false;
+    backupBlocked = result === "remote-exists";
+    return result;
+  } catch (error) {
+    backupFailing = true;
+    if (error?.kind === "offline" || error?.kind === "busy") requestBackgroundSync();
+    throw error;
+  } finally {
+    await renderBackupStatus().catch(() => {});
+  }
+}
+
+/** גיבוי אוטומטי. כישלון לא מדווח: הרשומות במכשיר, והטריגר הבא ינסה שוב.
+    מחזיר את התוצאה של backupIfChanged, או null אם נכשל. */
+async function backupQuietly() {
+  try {
+    return await trackedBackup();
+  } catch {
+    return null;
+  }
+}
+
+/** הגיבוי שאחרי פעולת הגדרה שהבעלים לחץ עליה. כאן הכישלון כן מוצג: טוקן בלי הרשאת
+    כתיבה, למשל, עובר את בדיקת המאגר, ובלי ההודעה כל גיבוי שלו היה נכשל בשקט.
+    "remote-exists" אינו שגיאה: שורת המצב כבר אומרת לשחזר קודם. */
+async function backupAfterSetup() {
+  try {
+    await trackedBackup();
+  } catch (error) {
+    view.showNotice(backup.describeBackupError(error), true);
+  }
+}
+
+/** מבקש מהדפדפן לנסות שוב בחזרת הרשת, גם כשהאפליקציה סגורה (Android).
+    בלי SyncManager או בכישלון: לא קורה כלום. */
+function requestBackgroundSync() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready
+    .then((reg) => reg.sync?.register(backup.SYNC_TAG))
+    .catch(() => {});
 }
 
 /* ================= תיקיות ================= */
@@ -165,7 +227,7 @@ async function renameFolder(from, raw) {
   folders.rename(from, to);
   openFolder(to);
   await refreshEntries();
-  if (moved.length) scheduleAutoSync();
+  if (moved.length) scheduleBackup();
 }
 
 /** הרשומות לא נמחקות. הן נשארות תחת "הכל", בלי תיקייה. */
@@ -177,7 +239,7 @@ async function deleteFolder(name) {
   folders.forget(name);
   openFolder("");
   await refreshEntries();
-  if (moved.length) scheduleAutoSync();
+  if (moved.length) scheduleBackup();
 }
 
 /* ================= פעולות הגיבוי ================= */
@@ -190,108 +252,113 @@ async function runExclusive(labelId, label, task) {
   try {
     await task();
   } catch (error) {
-    view.showNotice(drive.describeDriveError(error), true);
+    view.showNotice(backup.describeBackupError(error), true);
   } finally {
     busy = false;
     restoreLabel();
   }
 }
 
-async function connectToDrive() {
+/** מעלה גם כשלא השתנה כלום, וגם מעל גיבוי שכבר במאגר. */
+function backupNow() {
   view.showNotice("");
+  return runExclusive("backupSub", "מעלה עותק מוצפן למאגר", async () => {
+    if ((await backup.backupIfChanged({ force: true })) !== "uploaded") return;
+    backupBlocked = false;
+    await renderBackupStatus();
+    view.showNotice(`גובה. ${entries.length} רשומות.`);
+    view.showToast("גובה");
+  });
+}
+
+/* ================= הגדרת הגיבוי ================= */
+
+/** פותח פאנל אחד וסוגר את מה שהיה פתוח. null סוגר הכל, וזה גם הביטול. */
+function openSetupPanel(panel, code = null) {
+  setupPanel = panel;
+  pendingCode = code;
+  setupError = null;
+  return renderBackupSetup();
+}
+
+/** הצלחה סוגרת את הפאנל ומריצה גיבוי. כישלון משאיר את הפאנל ואת מה שהוקלד, עם ההודעה. */
+async function runSetup(panel, task) {
   try {
-    await drive.connect();
-    view.showNotice("מחובר לדרייב.");
-    view.showToast("מחובר לדרייב");
+    await task();
   } catch (error) {
-    view.showNotice(drive.describeDriveError(error), true);
+    setupPanel = panel;
+    setupError = backup.describeBackupError(error);
+    return renderBackupSetup();
+  }
+  setupPanel = null;
+  pendingCode = null;
+  setupError = null;
+  view.showNotice("");
+  await Promise.all([renderBackupSetup(), renderBackupStatus()]);
+  backupAfterSetup();
+}
+
+/** העתקה שנכשלה לא נשארת בשקט: אחרת הבעלים מדביק במנהל הסיסמאות את מה שהיה
+    בלוח קודם, ומאבד את העותק היחיד של הקוד. הקוד מסומן, כך שלחיצה ארוכה מעתיקה אותו. */
+async function copyCode() {
+  try {
+    await navigator.clipboard.writeText(pendingCode);
+    view.showToast("הקוד הועתק. אחרי ששמרת אותו, מחק אותו מהיסטוריית הלוח.");
+  } catch {
+    view.selectRecoveryCode();
+    view.showToast("ההעתקה לא הצליחה. הקוד מסומן — העתק אותו ידנית.");
   }
 }
 
-function syncNow() {
+/** מציג את הגרסאות במאגר, מהחדשה לישנה. */
+function showVersions() {
   view.showNotice("");
-  return runExclusive("syncSub", "מסנכרן…", async () => {
-    const filename = await drive.syncLatest(serializeEntries(entries));
-    view.showNotice(`סונכרן — ${entries.length} רשומות בקובץ ${filename}.`);
-    view.showToast("סונכרן לדרייב");
+  return runExclusive("restoreSub", "טוען גרסאות", async () => {
+    view.renderVersionList(await backup.listVersions());
   });
 }
 
-function saveSnapshot() {
+/** מוסיף מגרסה אחת רשומות שחסרות, ומסיר את חסימת "במאגר כבר יש גיבוי". */
+function restoreFrom(commit) {
   view.showNotice("");
-  return runExclusive("syncSub", "שומר גרסה…", async () => {
-    const name = await drive.saveSnapshot(
-      timestampedFilename(),
-      serializeEntries(entries)
-    );
-    view.showNotice(`נשמרה גרסה: ${name}`);
-    view.showToast("גרסה נשמרה בדרייב");
-  });
-}
-
-function showBackups() {
-  view.showNotice("");
-  view.showBackupMessage("מחפש גיבויים…", { busy: true });
-  return runExclusive("syncSub", "מחפש…", async () => {
-    const files = await drive.listBackups();
-    if (!files.length) {
-      view.showBackupMessage("לא נמצאו קובצי גיבוי בתיקייה.");
-      return;
-    }
-    view.renderBackupList(files);
-  });
-}
-
-function restoreFrom(fileId) {
-  view.showBackupMessage("משחזר…", { busy: true });
-  return runExclusive("syncSub", "משחזר…", async () => {
-    const text = await drive.downloadBackup(fileId);
-
-    let incoming;
-    try {
-      incoming = readEntries(text);
-    } catch {
-      view.showBackupMessage(BAD_BACKUP_MESSAGE);
-      return;
-    }
-
-    const added = await store.addMissing(incoming);
+  return runExclusive("restoreSub", "משחזר", async () => {
+    const added = await backup.restoreVersion(commit);
+    view.showBackupMessage("");
     await refreshEntries();
-    view.showBackupMessage(
-      added ? `שוחזרו ${added} רשומות.` : "כל הרשומות בקובץ כבר קיימות."
-    );
+    backupBlocked = false;
+    await renderBackupStatus();
+    view.showNotice(added ? `שוחזרו ${added} רשומות.` : "כל הרשומות בגרסה כבר קיימות.");
     if (added) view.showToast(`שוחזרו ${added} רשומות`);
+    backupAfterSetup();
   });
 }
 
 function exportToFile() {
-  const blob = new Blob([serializeEntries(entries)], {
-    type: "application/json",
+  view.showNotice("");
+  return runExclusive("exportSub", "מצפין", async () => {
+    const blob = new Blob([await backup.exportFile()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = timestampedFilename();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = timestampedFilename();
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function importFromFile(file) {
-  try {
-    const added = await store.addMissing(readEntries(await file.text()));
+function importFromFile(file) {
+  view.showNotice("");
+  return runExclusive("importSub", "מייבא", async () => {
+    const added = await backup.importFile(await file.text());
     await refreshEntries();
-    view.showNotice(
-      added ? `יובאו ${added} רשומות.` : "כל הרשומות בקובץ כבר קיימות."
-    );
+    view.showNotice(added ? `יובאו ${added} רשומות.` : "כל הרשומות בקובץ כבר קיימות.");
     if (added) {
       view.showToast(`יובאו ${added} רשומות`);
-      scheduleAutoSync();
+      scheduleBackup();
     }
-  } catch {
-    view.showNotice(BAD_BACKUP_MESSAGE, true);
-  }
+  });
 }
 
 /* ================= חיווט ================= */
@@ -494,6 +561,7 @@ function wireBackupSheet() {
     sheet.classList.add("open");
     view.showNotice("");
     view.showBackupMessage("");
+    renderBackupStatus();
   };
   const closeSheet = () => {
     scrim.classList.remove("open");
@@ -506,10 +574,12 @@ function wireBackupSheet() {
     if (event.key === "Escape") closeSheet();
   });
 
-  view.byId("connectBtn").addEventListener("click", connectToDrive);
-  view.byId("syncBtn").addEventListener("click", syncNow);
-  view.byId("snapshotBtn").addEventListener("click", saveSnapshot);
-  view.byId("restoreBtn").addEventListener("click", showBackups);
+  view.byId("backupBtn").addEventListener("click", backupNow);
+  view.byId("restoreBtn").addEventListener("click", showVersions);
+  view.byId("backupList").addEventListener("click", (event) => {
+    const item = event.target.closest("[data-commit]");
+    if (item) restoreFrom(item.dataset.commit);
+  });
   view.byId("exportBtn").addEventListener("click", exportToFile);
 
   const fileInput = view.byId("importFile");
@@ -520,35 +590,75 @@ function wireBackupSheet() {
     event.target.value = "";
   });
 
-  view.byId("backupList").addEventListener("click", (event) => {
-    const item = event.target.closest("[data-file]");
-    if (item) restoreFrom(item.dataset.file);
+  wireBackupSetup();
+}
+
+function wireBackupSetup() {
+  const box = view.byId("backupSetup");
+  const field = (role) => box.querySelector(`[data-role="${role}"]`).value;
+
+  box.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-act]");
+    if (!button) return;
+
+    switch (button.dataset.act) {
+      case "new-key":
+        return openSetupPanel("new-key", await backup.newRecoveryCode());
+
+      case "enter-code":
+        return openSetupPanel("enter-code");
+
+      case "edit-account":
+        return openSetupPanel("account");
+
+      case "cancel-setup":
+        return openSetupPanel(null);
+
+      case "copy-code":
+        return copyCode();
+
+      case "confirm-code":
+        /* לחיצה כפולה: הראשונה כבר שמרה את המפתח וניקתה את הקוד. */
+        if (!pendingCode) return;
+        return runSetup("new-key", () => backup.saveKey(pendingCode));
+
+      case "save-code":
+        return runSetup("enter-code", () => backup.saveKey(field("codebox")));
+
+      case "save-account":
+        return runSetup("account", () =>
+          backup.saveAccount(field("repobox"), field("tokenbox"))
+        );
+    }
   });
 }
 
 /* ================= עלייה ================= */
 
-/** ספריית גוגל נטענת async, ולכן שווה לנסות שוב אחרי טעינת הדף. */
-function reconnectWhenReady() {
-  const attempt = async () => {
-    const connected = await drive.reconnectSilently();
-    if (connected) view.byId("connectSub").textContent = "מחובר";
-    return connected;
-  };
-
-  attempt().then((connected) => {
-    if (connected) return;
-    window.addEventListener("load", () => setTimeout(attempt, 500));
-  });
+/** גיבוי שקט בכל מעבר. ביציאה לרקע, כשהגיבוי מוגדר, גם תג Background Sync:
+    אם Android סוגר את האפליקציה באמצע העלאה, ה-service worker מסיים אותה.
+    כשלא השתנה כלום, הריצה שם מחזירה "unchanged" בלי בקשה. */
+function onVisibilityChange() {
+  backupQuietly();
+  if (document.visibilityState !== "hidden") return;
+  backup
+    .status()
+    .then(({ kid, repo }) => kid && repo && requestBackgroundSync())
+    .catch(() => {});
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", () => {
+  const register = () => {
     navigator.serviceWorker
-      .register("sw.js")
+      /* updateViaCache "none": גם המודולים שה-worker מייבא נבדקים מול הרשת,
+         ולא נשארים גרסה אחת מאחורי הדף בגלל ה-max-age של GitHub Pages. */
+      .register("sw.js", { type: "module", updateViaCache: "none" })
       .catch((error) => console.warn("service worker registration failed", error));
-  });
+  };
+  /* boot() קורא לכאן אחרי awaits, אז "load" כבר יכול היה לעבור. */
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register);
 }
 
 async function boot() {
@@ -559,13 +669,10 @@ async function boot() {
   wireEntryList();
   wireBackupSheet();
 
-  drive.onConnectionChange(renderSyncStatus);
-  renderSyncStatus();
-  window.addEventListener("online", scheduleAutoSync);
-
   try {
     await store.open();
     await refreshEntries();
+    await Promise.all([renderBackupSetup(), renderBackupStatus()]);
   } catch {
     view.byId("list").innerHTML =
       `<p class="empty">הדפדפן חוסם אחסון מקומי, ולכן אי אפשר לשמור רשומות.` +
@@ -573,12 +680,10 @@ async function boot() {
     return;
   }
 
-  if (drive.isConfigured()) {
-    reconnectWhenReady();
-  } else {
-    view.byId("connectSub").textContent = "חסר Client ID ב-config.js";
-    view.byId("connectBtn").disabled = true;
-  }
+  /* גיבוי שקט בעלייה, כשהרשת חוזרת, ובכל מעבר לרקע ובחזרה ממנו. */
+  backupQuietly();
+  window.addEventListener("online", backupQuietly);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   registerServiceWorker();
 }

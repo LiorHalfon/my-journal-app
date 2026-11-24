@@ -2,9 +2,11 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; connect-src https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>יומן</title>
-<meta name="description" content="יומן אישי מינימליסטי עם גיבוי לגוגל דרייב">
+<meta name="description" content="יומן אישי מינימליסטי עם גיבוי מוצפן">
 <meta name="theme-color" content="#E9EBE8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121614" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
@@ -14,10 +16,36 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200..700&family=Heebo:wght@200..800&display=swap" rel="stylesheet">
 <style>
+/* פונטים מהאפליקציה עצמה, לא מ-Google. רק עברית ולטינית: זה כל מה שהיומן מציג. */
+@font-face{
+  font-family: "Assistant";
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("fonts/assistant-hebrew.woff2") format("woff2");
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face{
+  font-family: "Assistant";
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("fonts/assistant-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face{
+  font-family: "Heebo";
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("fonts/heebo-hebrew.woff2") format("woff2");
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face{
+  font-family: "Heebo";
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("fonts/heebo-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 :root{
   color-scheme: light dark;
   --paper:       light-dark(#E9EBE8, #121614);
@@ -183,7 +211,7 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 }
 .action:hover:not(:disabled){background:var(--paper)}
 .action:disabled{color:var(--ink-faint);cursor:default}
-.action .ico{
+.action .ico,.setup-line .ico{
   width:1.9rem;height:1.9rem;border-radius:.5rem;flex:none;
   background:var(--accent-soft);color:var(--accent);
   display:grid;place-items:center;font-size:.95rem;
@@ -197,6 +225,22 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 }
 .notice.bad{border-color:var(--danger);color:var(--danger)}
 .notice a{color:var(--accent)}
+.sheet .sub.warn{color:var(--danger)}
+.setup{padding-bottom:.4rem}
+.setup h3{font-size:.8rem;font-weight:600;color:var(--ink-soft);margin:.9rem 0 .2rem}
+.setup > h3:first-child{margin-top:0}
+.setup-line{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem;padding:.35rem .3rem;font-size:.95rem}
+.setup-line .txt{flex:1 1 auto;min-width:0}
+.setup-buttons{display:flex;flex-wrap:wrap;gap:.5rem;margin-inline-start:auto}
+.setup-line .tbtn{min-height:2.75rem}
+.setup .folder-panel input + input{margin-top:.5rem}
+.setup input:placeholder-shown{direction:rtl}
+.setup .panel-head{margin:0 0 .5rem;font-size:.9rem;font-weight:600}
+.code{
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:1rem;line-height:1.9;letter-spacing:.04em;
+  padding:.55rem .8rem;border-radius:.5rem;border:1px solid var(--rule);background:var(--paper);
+  -webkit-user-select:all;user-select:all;overflow-wrap:anywhere;
+}
 .backup-item{
   display:flex;align-items:center;gap:.6rem;width:100%;
   appearance:none;border:0;background:transparent;cursor:pointer;
@@ -230,7 +274,7 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 <body>
 <div class="wrap">
   <header>
-    <h1>יומן<span class="dot" id="syncDot" title="מצב סנכרון"></span></h1>
+    <h1>יומן<span class="dot" id="syncDot" title="גיבוי לא הוגדר"></span></h1>
     <button class="iconbtn" id="searchBtn" aria-label="חיפוש" aria-expanded="false">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     </button>
@@ -260,32 +304,26 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="grip"></div>
   <h2 id="sheetTitle">גיבוי ושחזור</h2>
-  <p class="sub" id="sheetSub">הרשומות נשמרות במכשיר. גיבוי מסנכרן עותק לתיקייה “Journal Backups” בדרייב שלך.</p>
+  <p class="sub" id="sheetSub">הגיבוי עוד לא הוגדר. הרשומות שמורות רק במכשיר הזה.</p>
 
-  <button class="action" id="connectBtn">
-    <span class="ico">◎</span>
-    <span class="txt">חיבור לגוגל דרייב<small id="connectSub">נדרש פעם אחת לכל מכשיר</small></span>
-  </button>
-  <button class="action" id="syncBtn">
+  <div class="setup" id="backupSetup"></div>
+
+  <button class="action" id="backupBtn" disabled>
     <span class="ico">↑</span>
-    <span class="txt">סנכרון עכשיו<small id="syncSub">מעדכן את קובץ הגיבוי הראשי</small></span>
+    <span class="txt">גיבוי עכשיו<small id="backupSub">מעלה עותק מוצפן למאגר</small></span>
   </button>
-  <button class="action" id="snapshotBtn">
-    <span class="ico">⧉</span>
-    <span class="txt">שמירת גרסה מתוארכת<small>עותק נפרד שלא נדרס</small></span>
-  </button>
-  <button class="action" id="restoreBtn">
+  <button class="action" id="restoreBtn" disabled>
     <span class="ico">↓</span>
-    <span class="txt">שחזור מדרייב<small>מוסיף רשומות שחסרות — לא מוחק כלום</small></span>
+    <span class="txt">שחזור<small id="restoreSub">מוסיף רשומות שחסרות — לא מוחק כלום</small></span>
   </button>
   <div class="divider"></div>
-  <button class="action" id="exportBtn">
+  <button class="action" id="exportBtn" disabled>
     <span class="ico">⤓</span>
-    <span class="txt">הורדת קובץ JSON<small>עותק מקומי למכשיר</small></span>
+    <span class="txt">ייצוא לקובץ מוצפן<small id="exportSub">נפתח רק עם קוד השחזור</small></span>
   </button>
   <button class="action" id="importBtn">
     <span class="ico">⤒</span>
-    <span class="txt">ייבוא מקובץ JSON<small>מיזוג לפי מזהה רשומה</small></span>
+    <span class="txt">ייבוא מקובץ<small id="importSub">קובץ מוצפן, או קובץ JSON ישן. מיזוג לפי מזהה רשומה</small></span>
   </button>
   <input type="file" id="importFile" accept="application/json,.json" hidden>
 
@@ -295,7 +333,6 @@ h1{font-size:1.05rem;font-weight:600;margin:0;flex:1}
 
 <div class="toast" id="toast"><div id="toastText"></div></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
